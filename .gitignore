@@ -13,3 +13,7 @@ states/
 # Optional
 .env
 .env.local
+
+vscode/
+node_modules/
+package-lock.json
