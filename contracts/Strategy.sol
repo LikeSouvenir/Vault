@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
-interface IStrategy {
+// https://github.com/yearn/yearn-vaults/blob/develop/contracts/Vault.vy
+interface IBaseStrategy {
     function want() external view returns(address); 
     function vault() external view returns(address);
     function isActive() external view returns(bool);
@@ -17,7 +17,7 @@ interface IStrategy {
     function migrate(address _newStrategy) external returns(address);
 }
 
-contract Strategy is IStrategy {
+contract Strategy is IBaseStrategy {
     bool _active;
     IERC20 _want;
     address _vault;

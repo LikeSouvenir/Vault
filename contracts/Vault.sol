@@ -35,49 +35,36 @@ contract Vault is ERC4626{
     }
 
     function _withdraw( address caller, address receiver, address owner, uint256 assets, uint256 shares ) internal override {
-        uint currentBalance = IERC20(asset()).balanceOf(address(this));
-        if (currentBalance < assets){
-            // если не хватит на этой стратегии?
-            transferFrom(address(getStrategyMinProfit()), address(this), assets - currentBalance);
-        }
+        // uint currentBalance = IERC20(asset()).balanceOf(address(this));
+        // if (currentBalance < assets){
+        //     // если не хватит на этой стратегии?
+        //     transferFrom(address(getStrategyMinProfit()), address(this), assets - currentBalance);
+        // }
         
-        super._withdraw(caller, receiver, owner, assets, shares);
+        // super._withdraw(caller, receiver, owner, assets, shares);
     }
 
     function strategieBalance() public view returns(uint) {
         // return strategie.estimatedTotalAssets();
     }
 
-    function remove(IStrategy newStrategy) external {
-        // strategie.migrate(address(newStrategy)); // перевод с остновкойсо старой стратегии на другую
+    function remove(IStrategy strategy) external {
+        // strategie.migrate(address(strategy)); // перевод с остновкойсо старой стратегии на другую
         // strategie = newStrategy;
     }
-    function add(IStrategy newStrategy) external {
+    function add(IStrategy strategy) external {
         // 1193 https://github.com/yearn/yearn-vaults/blob/develop/contracts/Vault.vy
         // require(newStrategy != address(0));
 
         // approve(address(newStrategy), balanceOf(address(this)));
     }
-    function update(IStrategy newStrategy) external {}
-    function run(IStrategy newStrategy) external {}
-    function pause(IStrategy newStrategy) external {}
-    function unpause(IStrategy newStrategy) external {}
+    function run(IStrategy strategy) external {}
+    function pause(IStrategy strategy) external {}
+    function unpause(IStrategy strategy) external {}
 
-    function getStrategyMinProfit() internal view returns(IStrategy addressWithMinProfit) {
-        uint minProfit;
-        for (uint i = 0; i < strategies.length; ++i) {
-            StrategyParams memory currentStrategy = strategiesMap[address(strategies[i])];
-            uint currecntAmount = currentStrategy.totalGain - currentStrategy.totalLoss;
-
-            if (minProfit < currecntAmount) {
-                minProfit = currecntAmount;
-                addressWithMinProfit = strategies[i];
-            }
-        }
-    }
-    function setWithdrawalQueue(address[] queue) external {
+    // function setWithdrawalQueue(address[] queue) external {
         
-    }
+    // }
 }
 
 interface IStrategy {
@@ -88,14 +75,4 @@ interface IStrategy {
     function estimatedTotalAssets() external view returns(uint256);
     function withdraw(uint256 _amount ) external returns(uint256);
     function migrate(address _newStrategy) external returns(address);
-}
-
-// interface HealthCheck {
-//     function check(address strategy, uint256 profit, uint256 loss, uint256 debtPayment, uint256 debtOutstanding, uint256 totalDebt) external view returns(bool);
-//     function doHealthCheck(strategy: address) -> bool: view
-//     function enableCheck(strategy: address): nonpayable
-// }
-
-interface BotManage {
-    
 }
