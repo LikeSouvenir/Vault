@@ -6,7 +6,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./BaseStrategy.sol";
 import "./Staking.sol";
-
+ 
  contract Strategy is BaseStrategy {
     using SafeERC20 for ERC20;
     Staking staking_;
@@ -15,26 +15,28 @@ import "./Staking.sol";
         staking_ = _staking;
     }
 
-    function _deposit(uint256 _amountWant) internal override(BaseStrategy) { /*must permissin grand*/
+    function _deposit(uint256 _amountWant) internal override { /*must permissin grand*/
         // SafeERC20.safeTransferFrom(_want, address(this), КУДА, _amountWant);
 
         staking_.deposite(_amountWant);
     }
 
-    function _withdraw(uint256 _amount) internal override(BaseStrategy) returns(uint256) {/*must permissin grand*/
+    function _withdraw(uint256 _amount) internal override returns(uint256) {/*must permissin grand*/
         // мб override изначальную функию, для передачи _amount
 
         return staking_.withdraw();
     }
 
-    function _harvestAndReport() internal override(BaseStrategy) returns(uint256 _totalAssets) { /*must permissin grand*/ 
+    function _harvestAndReport() internal override returns(uint256 _totalAssets) { /*must permissin grand*/ 
         // урожай и отчет
         //      if(!TokenizedStrategy.isShutdown()) {
         //          _claimAndSellRewards();
         //      }
         //      _totalAssets = aToken.balanceOf(address(this)) + asset.balanceOf(address(this));
+        staking_.deposite(100);
+
         (uint amount, ) = staking_.balanceOf(address(this));
-        _totalAssets = _want.balanceOf(address(this)) + amount;
+        _totalAssets = _asset.balanceOf(address(this)) + amount;
     }
 
 }

@@ -8,66 +8,105 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {Slots} from "../Vault/utils/elements.sol";
 import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
+import {BaseStrategy} from "./BaseStrategy.sol";
+/**
+ * синхронизация доходов
+ * 
+ */
 
 contract Vault is ERC4626, IFeeConfig{
+    uint constant BPS = 10_000;
+    uint constant DEFAULT_STRATEGY_SHARE = 100;
+
     uint16 _managementFee; // The percent in basis points of profit that is charged as a fee.
     address feeRecipient; // The address to pay the `performanceFee` to.
 
-    string __name = "Asset Token";
-    string __symbol = "ASSET";
-    constructor() ERC4626(IERC20(new AssetERC20(__name, __symbol))) ERC20("Share Token", "SHARE") { // string memory name_, string memory symbol_  
+    address _management;
 
+    uint _totalAssets;
+
+    mapping (BaseStrategy => uint) strategiesSharesMap;
+    BaseStrategy[] strategies;
+
+    constructor() ERC4626(IERC20(new AssetERC20("Asset Token", "ASSET"))) ERC20("Share Token", "SHARE") {
+         // string memory name_, string memory symbol_  
     }
-    function feeConfig() external view returns (uint16, address) {
-        return (_managementFee, feeRecipient);
+
+    /**
+     * @dev Require that the call is coming from the strategies management.
+     */
+    modifier onlyManagement() {
+        require(msg.sender == _management, "management");
+        _;
     }
+
+
+
 // Поддержка нескольких стратегий одним волтом.
 
     
-    // function totalAssets() public view override returns (uint256) {
-        // strategies перебираем их балансы
-        // return IERC20(asset()).balanceOf(address(this)) + strategieBalance();
-    // }
+    function totalAssets() public view override returns (uint256) {
+        return _totalAssets;
+    }
 
     function _withdraw( address caller, address receiver, address owner, uint256 assets, uint256 shares ) internal override {
-        // uint currentBalance = IERC20(asset()).balanceOf(address(this));
-        // if (currentBalance < assets){
+        uint currentBalance = IERC20(asset()).balanceOf(address(this));
+        if (currentBalance < assets){
         //     // если не хватит на этой стратегии?
-        //     transferFrom(address(getStrategyMinProfit()), address(this), assets - currentBalance);
-        // }
+            transferFrom(address(strategies[0]), address(this), assets - currentBalance);
+        }
         
-        // super._withdraw(caller, receiver, owner, assets, shares);
+        super._withdraw(caller, receiver, owner, assets, shares);
     }
 
     function strategieBalance() public view returns(uint) {
         // return strategie.estimatedTotalAssets();
     }
 
-    function remove(IStrategy strategy) external {
+    function remove(BaseStrategy strategy) external {
         // strategie.migrate(address(strategy)); // перевод с остновкойсо старой стратегии на другую
         // strategie = newStrategy;
     }
-    function add(IStrategy strategy) external {
-        // 1193 https://github.com/yearn/yearn-vaults/blob/develop/contracts/Vault.vy
-        // require(newStrategy != address(0));
-
+    function add(BaseStrategy strategy) external {
         // approve(address(newStrategy), balanceOf(address(this)));
+        strategiesSharesMap[strategy] = DEFAULT_STRATEGY_SHARE; // или доля, или ничего, ждем менеджера, или принимать
     }
-    function run(IStrategy strategy) external {}
-    function pause(IStrategy strategy) external {}
-    function unpause(IStrategy strategy) external {}
+    function run(BaseStrategy strategy) external {}
+    function pause(BaseStrategy strategy) external {}
+    function unpause(BaseStrategy strategy) external {}
 
     // function setWithdrawalQueue(address[] queue) external {
-        
     // }
-}
 
-interface IStrategy {
-    function want() external view returns(address);
-    function vault() external view returns(address);
-    function isActive() external view returns(bool);
-    function delegatedAssets() external view returns(uint256);
-    function estimatedTotalAssets() external view returns(uint256);
-    function withdraw(uint256 _amount ) external returns(uint256);
-    function migrate(address _newStrategy) external returns(address);
+    // вызывает БОТ
+    function updateStrategyDeposit(BaseStrategy strategy) internal returns(uint maxAmount) {
+        uint sharePersent = strategiesSharesMap[strategy];
+
+        require(sharePersent != 0, "strategy not found");
+
+        uint currentBalance = strategy.totalAssets();
+        maxAmount = _totalAssets * sharePersent / 100;
+        
+        if (currentBalance < maxAmount) {
+            strategy.deposit(maxAmount - currentBalance);
+
+        } else if (currentBalance > maxAmount)  {
+            strategy.withdraw(currentBalance - maxAmount);
+        }
+    }
+
+    function setPersent(BaseStrategy strategy, uint sharePersent) external onlyManagement {
+        require(sharePersent > 0, "sharePersent must be > 0");
+        require(sharePersent <= 100, "sharePersent must be <= 100");
+
+        strategiesSharesMap[strategy] = sharePersent;
+    }
+
+    function strategyPesent(address strategy) external view returns(uint sharePersent) {
+        return strategiesSharesMap[BaseStrategy(strategy)];
+    }
+
+    function feeConfig() external view returns (uint16, address) {
+        return (_managementFee, feeRecipient);
+    }
 }
