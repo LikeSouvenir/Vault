@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IStrategy {
     function want() external view returns(address); 
-    function vault() external view returns(address);
+    function vault() external view returns(address);  
     function isActive() external view returns(bool);
     function delegatedAssets() external view returns(uint256);// делегированные активы
     function estimatedTotalAssets() external view returns(uint256);// Оценочные общие активы
