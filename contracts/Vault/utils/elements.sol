@@ -5,16 +5,8 @@ contract Slots {
 
     constructor() {}
 
-    // STRUCTS //
-    struct StrategyParams {
-        uint256 activation; 
-        uint256 last_report;
-        uint256 current_debt;
-        uint256 max_debt;
-    }
 
     // CONSTANTS //
-    uint256 constant MAX_QUEUE = 10;
     uint256 constant MAX_BPS = 10_000;
     uint256 constant MAX_BPS_EXTENDED = 1_000_000_000_000;
 
@@ -50,12 +42,8 @@ contract Slots {
     }
 
     // STORAGE //
-    address public asset;
-    uint8 public decimals;
     address factory;
 
-    mapping(address => StrategyParams) public strategies;
-    address[MAX_QUEUE] public default_queue;
     bool public use_default_queue;
     bool public auto_allocate;
 

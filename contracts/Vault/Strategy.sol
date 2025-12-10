@@ -11,8 +11,8 @@ interface IStrategy {
     function want() external view returns(address); 
     function vault() external view returns(address);
     function isActive() external view returns(bool);
-    function delegatedAssets() external view returns(uint256);
-    function estimatedTotalAssets() external view returns(uint256);
+    function delegatedAssets() external view returns(uint256);// делегированные активы
+    function estimatedTotalAssets() external view returns(uint256);// Оценочные общие активы
     function withdraw(uint256 _amount ) external returns(uint256);
     function migrate(address _newStrategy) external returns(address);
 }
