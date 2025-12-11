@@ -9,13 +9,15 @@ import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 
 abstract contract BaseStrategy is ReentrancyGuard {
     uint constant TWELVE_MONTHS = 12;
+    uint16 constant DEFAULT_FEE = 200;
+
     uint _bps = 10_000;
     uint _totalAssets;
 
     address _vault; // default manager
     ERC20 _asset;
     bool _paused;
-    uint16 _performanceFee; // The percent in basis points of profit that is charged as a fee.
+    uint16 _performanceFee = DEFAULT_FEE; // The percent in basis points of profit that is charged as a fee.
     string _name;
     
     address _management; // Main address that can set all configurable variables.
@@ -75,7 +77,7 @@ abstract contract BaseStrategy is ReentrancyGuard {
 
     event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss, uint256 performanceFees);
 
-    function report() external nonReentrant onlyKeeperOrManagement returns (uint256 profit, uint256 loss) {
+    function report() external nonReentrant onlyKeeperOrManagement returns(uint256 profit, uint256 loss) {
         uint newTotalAssets = _harvestAndReport();
         uint currentFee;
 
@@ -112,15 +114,15 @@ abstract contract BaseStrategy is ReentrancyGuard {
 
     function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
 
-    function migrate(address _newStrategy) external virtual onlyManagement returns(uint _amountAssets) {
+    function migrate(BaseStrategy _newStrategy) external virtual onlyManagement returns(uint _amountAssets) {
         _amountAssets = _harvestAndReport();
         _withdraw(_amountAssets);
 
-        BaseStrategy(_newStrategy).deposit(_asset.balanceOf(address(this)));
+        _newStrategy.deposit(_asset.balanceOf(address(this)));
     }
 
-    function emergencyWithdraw() external onlyManagement virtual {
-        uint _amount = _lockAndTake();
+    function emergencyWithdraw() external onlyManagement virtual returns(uint _amount) {
+        _amount = _lockAndTake();
 
         SafeERC20.safeTransferFrom(_asset, address(this), _vault, _amount);
     }
@@ -155,5 +157,14 @@ abstract contract BaseStrategy is ReentrancyGuard {
 
     function isPaused() external virtual view returns(bool) {
         return _paused;
+    }
+
+    function setPerformanceFee(uint16 newFee) external onlyManagement {
+        require(newFee >= uint16(1), "min % is 0,01");
+        _performanceFee = newFee;
+    }
+
+    function performanceFee() external view returns(uint16) {
+        return _performanceFee;
     }
 }
