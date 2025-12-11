@@ -32,9 +32,7 @@ contract Vault is ERC4626, IFeeConfig{
     address _management;
     address _keeper;
 
-    uint _totalAssets;
-
-    mapping (BaseStrategy => uint shares) strategiesSharesMap;
+    mapping (BaseStrategy => uint shares) strategyBalancePersentMap;
     BaseStrategy[MAXIMUM_STRATEGIES] withdrawQueue;
 
     constructor() ERC4626(IERC20(new AssetERC20("Asset Token", "ASSET"))) ERC20("Share Token", "SHARE") {
@@ -58,23 +56,9 @@ contract Vault is ERC4626, IFeeConfig{
         _;
     }
 //
-
-    function strategyBalance(BaseStrategy strategy) public view returns(uint) {
-        return strategy.totalAssets();
-    }
-
-    function pause(BaseStrategy strategy) external onlyKeeperOrManagement {
-        strategy.pause();
-    }
-
-    function unpause(BaseStrategy strategy) external onlyKeeperOrManagement {
-        strategy.unpause();
-    }
-
-    event StrategyMigrated ( address indexed oldVersion, address indexed newVersion );
     
     function migrate(BaseStrategy oldStrategy, BaseStrategy newStrategy) external onlyManagement {
-        require (strategiesSharesMap[oldStrategy] != 0, "strategy not exist");
+        require (strategyBalancePersentMap[oldStrategy] != 0, "strategy not exist");
 
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
             if (withdrawQueue[i] == oldStrategy) {
@@ -87,10 +71,8 @@ contract Vault is ERC4626, IFeeConfig{
         emit StrategyMigrated(address(oldStrategy), address(newStrategy));
     }
 
-    event StrategyRemoved ( address indexed strategy, uint totalAssets);
-
     function remove(BaseStrategy strategy) external onlyManagement returns(uint amountAssets){
-        require (strategiesSharesMap[strategy] != 0, "strategy not exist");
+        require (strategyBalancePersentMap[strategy] != 0, "strategy not exist");
 
         bool find;
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
@@ -98,7 +80,7 @@ contract Vault is ERC4626, IFeeConfig{
                 amountAssets = strategy.emergencyWithdraw();
                 find = true;
             }
-            if (find && MAXIMUM_STRATEGIES != MAXIMUM_STRATEGIES - 1) {
+            if (find && i != MAXIMUM_STRATEGIES - 1) {
                 withdrawQueue[i] = withdrawQueue[i + 1];
             }
         }
@@ -108,10 +90,8 @@ contract Vault is ERC4626, IFeeConfig{
         emit StrategyRemoved (address(strategy), amountAssets);
     }
 
-    event StrategyAdded (address indexed strategy, uint256 performanceFee);
-
     function add(BaseStrategy newStrategy, uint sharePersent) external onlyManagement {
-        require (strategiesSharesMap[newStrategy] == 0, "strategy exist");
+        require (strategyBalancePersentMap[newStrategy] == 0, "strategy exist");
         require (address(withdrawQueue[MAXIMUM_STRATEGIES - 1]) == address(0), "strategy count out of bounds");
 
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
@@ -128,7 +108,7 @@ contract Vault is ERC4626, IFeeConfig{
     function _withdraw( address caller, address receiver, address owner, uint256 assets, uint256 shares ) internal override {
         uint currentBalance = IERC20(asset()).balanceOf(address(this));
         if (currentBalance < assets){
-            uint amount = currentBalance - assets;
+            uint needed = assets - currentBalance;
 
             for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
                 BaseStrategy currentStrategy = withdrawQueue[i];
@@ -136,24 +116,24 @@ contract Vault is ERC4626, IFeeConfig{
                     break;
                 }
 
-                uint strategyBalance = currentStrategy.totalAssets();
+                uint balance = currentStrategy.totalAssets();
                 
-                if (amount <= strategyBalance) {
-                    currentStrategy.withdraw(amount);
+                if (needed <= balance) {
+                    currentStrategy.withdraw(needed);
+
+                    needed = 0;
                     break;
                 } else {
-                    currentStrategy.withdraw(strategyBalance);
-                    amount -= strategyBalance;
+                    currentStrategy.withdraw(balance);
+                    needed -= balance;
                 }
             }
 
-            require(amount > 0, "not enaught");
+            require(needed != 0, "not enaugth");
         }
 
         super._withdraw(caller, receiver, owner, assets, shares);
     }
-    
-    event UpdateWithdrawalQueue(BaseStrategy[MAXIMUM_STRATEGIES]);
 
     function setWithdrawalQueue(BaseStrategy[MAXIMUM_STRATEGIES] memory queue) external onlyManagement {
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
@@ -164,7 +144,7 @@ contract Vault is ERC4626, IFeeConfig{
             }
             require (address(queue[i]) != address(0), "Cannot use to remove");
 
-            require (strategiesSharesMap[queue[i]] == 0, "Incorrect address");
+            require (strategyBalancePersentMap[queue[i]] != 0, "Incorrect address");
         }
 
         withdrawQueue = queue;
@@ -176,27 +156,32 @@ contract Vault is ERC4626, IFeeConfig{
         return withdrawQueue;
     }
 
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////переделать на цикл//////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
     function reportAndInvest(BaseStrategy strategy) external onlyKeeperOrManagement {
         /* (uint256 profit, uint256 loss) = */ strategy.report();
 
         updateStrategyBalance(strategy);
     }
 
-    event UpdateStrategyBalance(BaseStrategy indexed strategy, uint newBalance);
-
     function updateStrategyBalance(BaseStrategy strategy) public onlyKeeperOrManagement returns(uint maxAmount) {
-        uint sharePersent = strategiesSharesMap[strategy];
+        uint balancePersent = strategyBalancePersentMap[strategy];
 
-        require(sharePersent != 0, "strategy not found");
+        require(balancePersent != 0, "strategy not found");
 
-        uint currentBalance = strategy.totalAssets();
-        maxAmount = _totalAssets * sharePersent / 100;
+        uint assetBalance = strategy.totalAssets();
+        maxAmount = totalAssets() * balancePersent / 100;
         
-        if (currentBalance < maxAmount) {
-            strategy.deposit(maxAmount - currentBalance);
+        if (assetBalance < maxAmount) {
+            IERC20(asset()).approve(address(strategy), maxAmount - assetBalance);
 
-        } else if (currentBalance > maxAmount)  {
-            strategy.withdraw(currentBalance - maxAmount);
+            strategy.deposit(maxAmount - assetBalance);
+
+        } else if (assetBalance > maxAmount)  {
+            IERC20(asset()).approve(address(strategy), assetBalance - maxAmount);
+
+            strategy.withdraw(assetBalance - maxAmount);
         }
 
         emit UpdateStrategyBalance(strategy, maxAmount);
@@ -206,11 +191,11 @@ contract Vault is ERC4626, IFeeConfig{
         require(sharePersent > 0, "sharePersent must be > 0");
         require(sharePersent <= 100, "sharePersent must be <= 100");
 
-        strategiesSharesMap[strategy] = sharePersent;
+        strategyBalancePersentMap[strategy] = sharePersent;
     }
 
     function strategyPesent(address strategy) external view returns(uint sharePersent) {
-        return strategiesSharesMap[BaseStrategy(strategy)];
+        return strategyBalancePersentMap[BaseStrategy(strategy)];
     }
 
     function feeConfig() external view returns (uint16, address) {
@@ -218,6 +203,36 @@ contract Vault is ERC4626, IFeeConfig{
     }
 
     function totalAssets() public view override returns (uint256) {
-        return _totalAssets;
+        uint256 vaultBalance = IERC20(asset()).balanceOf(address(this));
+
+        for (uint256 i = 0; i < withdrawQueue.length; i++) {
+            BaseStrategy strategy = withdrawQueue[i];
+
+            vaultBalance += strategy.totalAssets();
+        }
+
+        return vaultBalance;
     }
+
+    function strategyBalance(BaseStrategy strategy) public view returns(uint) {
+        return strategy.totalAssets();
+    }
+
+    function pause(BaseStrategy strategy) external onlyKeeperOrManagement {
+        strategy.pause();
+    }
+
+    function unpause(BaseStrategy strategy) external onlyKeeperOrManagement {
+        strategy.unpause();
+    }
+
+    event StrategyAdded (address indexed strategy, uint256 performanceFee);
+
+    event UpdateStrategyBalance(BaseStrategy indexed strategy, uint newBalance);
+    
+    event UpdateWithdrawalQueue(BaseStrategy[MAXIMUM_STRATEGIES]);
+
+    event StrategyMigrated ( address indexed oldVersion, address indexed newVersion );
+
+    event StrategyRemoved ( address indexed strategy, uint totalAssets);
 }

@@ -36,7 +36,7 @@ abstract contract BaseStrategy is ReentrancyGuard {
         _keeper = keeper;
         _vault = vaultAddr;
 
-        // SafeERC20.forceApprove(_asset, _vault, type(uint256).max);
+        SafeERC20.forceApprove(_asset, _vault, type(uint256).max);// проверять при добавлении в addStrategy
     }
 
     /**
@@ -57,22 +57,27 @@ abstract contract BaseStrategy is ReentrancyGuard {
     }
 
     modifier notPaused() {
-        require(_paused = false, "is paused");
+        require(_paused == false, "is paused");
         _;
     }
 
-    function withdraw(uint256 _amount) external virtual nonReentrant onlyKeeperOrManagement returns(uint256) {
-        uint _amountAssets = _harvestAndReport();
-        require(_amount > _amountAssets, "not enaugth");
+    function withdraw(uint256 _amount) external virtual nonReentrant onlyKeeperOrManagement notPaused returns(uint256 value) {
+        uint available = _harvestAndReport();
+        require(_amount <= available, "insufficient assets");
 
-        return _withdraw(_amount);
+        value = _withdraw(_amount);
+
+        _totalAssets = available - _amount;
     }
 
     function deposit(uint256 _amountAsset) external virtual onlyKeeperOrManagement notPaused{
         require(_amountAsset >= _asset.allowance(_vault, address(this)), "not enaugth allowance");
-        SafeERC20.safeTransferFrom(_asset, msg.sender, address(this), _amountAsset);
+        SafeERC20.safeTransferFrom(_asset, _vault, address(this), _amountAsset);
+
 
         _deposit(_amountAsset);
+
+        _totalAssets += _amountAsset;
     }
 
     event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss, uint256 performanceFees);
@@ -87,9 +92,19 @@ abstract contract BaseStrategy is ReentrancyGuard {
             profit = newTotalAssets - _totalAssets;
             
             uint currentPerformanceFee = (profit * _performanceFee) / _bps;
-            uint currentManagementFee  = ((newTotalAssets * managementFee) / _bps) / TWELVE_MONTHS;
-            currentFee = currentManagementFee + currentPerformanceFee;
 
+            if (managementFee != 0) {
+                // ДОЛЖНО БЫТЬ ВЫЗВАНО НЕ ЧАЩИ 1 РАЗА В МЕСЯЦ
+                //  если report вызывается реже или чаще, то managementFee будет неадекватным.
+                
+                // рекомендация - учитывать время при расчете управленческой комиссии
+                uint currentManagementFee  = ((newTotalAssets * managementFee) / _bps) / TWELVE_MONTHS;
+                
+                currentFee = currentManagementFee + currentPerformanceFee;
+            } else {
+                currentFee = currentPerformanceFee;
+            }
+                
             if (currentFee != 0) {
                 if (profit < currentFee) {
                     currentFee = profit;
@@ -103,7 +118,7 @@ abstract contract BaseStrategy is ReentrancyGuard {
             loss = _totalAssets - newTotalAssets;
         }
 
-        _totalAssets = newTotalAssets;
+        _totalAssets = newTotalAssets - currentFee;
 
         emit Report(block.timestamp, profit, loss, currentFee);
     }
@@ -119,6 +134,8 @@ abstract contract BaseStrategy is ReentrancyGuard {
         _withdraw(_amountAssets);
 
         _newStrategy.deposit(_asset.balanceOf(address(this)));
+
+        _totalAssets = 0;
     }
 
     function emergencyWithdraw() external onlyManagement virtual returns(uint _amount) {
