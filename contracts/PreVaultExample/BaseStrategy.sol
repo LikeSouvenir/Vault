@@ -68,27 +68,27 @@ abstract contract BaseStrategy is ReentrancyGuard {
         _;
     }
 
-    function withdraw(uint256 _amount) external virtual nonReentrant onlyKeeperOrManagement notPaused returns(uint256 value) {
+
+    function withdraw(uint256 _amount) public virtual nonReentrant onlyKeeperOrManagement notPaused returns(uint256 value) {
         uint available = _harvestAndReport();
         require(_amount <= available, "insufficient assets");
 
         value = _withdraw(_amount);
 
-        _totalAssets = available - _amount;
+        _totalAssets -= value;
 
-        emit Withdraw(_totalAssets, _amount);
+        emit Withdraw(_totalAssets, value);
     }
 
-    function deposit(uint256 _amountAsset) external virtual onlyKeeperOrManagement notPaused{
-        require(_amountAsset >= _asset.allowance(_vault, address(this)), "not enaugth allowance");
-        SafeERC20.safeTransferFrom(_asset, _vault, address(this), _amountAsset);
+    function deposit(uint256 _amount) public virtual onlyKeeperOrManagement notPaused{
+        require(_amount <= _asset.allowance(_vault, address(this)), "not enaugth allowance");
+        SafeERC20.safeTransferFrom(_asset, _vault, address(this), _amount);
 
+        _deposit(_amount);
 
-        _deposit(_amountAsset);
-
-        _totalAssets += _amountAsset;
+        _totalAssets -= _amount;
         
-        emit Deposit(_totalAssets, _amountAsset);
+        emit Deposit(_totalAssets, _amount);
     }
 
     function report() external nonReentrant onlyKeeperOrManagement returns(uint256 profit, uint256 loss) {
@@ -104,15 +104,14 @@ abstract contract BaseStrategy is ReentrancyGuard {
 
             if (managementFee != 0) {
                 uint oneMonth = SECONDS_PER_YEAR / TWELVE_MONTHS;
+                uint monthsPassed = (block.timestamp - lastTakeTime) / oneMonth;
 
-                // ДОЛЖНО БЫТЬ ВЫЗВАНО НЕ ЧАЩИ 1 РАЗА В МЕСЯЦ   
-                //  если report вызывается реже или чаще, то managementFee будет неадекватным.
-                if (block.timestamp >= lastTakeTime) {
-                    lastTakeTime = block.timestamp + oneMonth;
+                if (monthsPassed > 0) {
+                    // Комиссия за каждый прошедший месяц
+                    uint monthlyFee = (newTotalAssets * managementFee) / BPS / TWELVE_MONTHS;
 
-                    uint currentManagementFee  = ((newTotalAssets * managementFee) / BPS) / TWELVE_MONTHS;
-                    
-                    currentFee += currentManagementFee;
+                    lastTakeTime += monthsPassed * oneMonth;
+                    currentFee += monthlyFee * monthsPassed;
                 }
             }
 
@@ -121,9 +120,9 @@ abstract contract BaseStrategy is ReentrancyGuard {
                     currentFee = profit;
                 }
 
-                _withdraw(currentFee);
+                withdraw(currentFee);
 
-                _asset.transfer(feeRecipient, currentFee);
+                SafeERC20.safeTransfer(_asset, feeRecipient, currentFee);
             }
         } else {
             loss = _totalAssets - newTotalAssets;
@@ -136,40 +135,40 @@ abstract contract BaseStrategy is ReentrancyGuard {
 
     function _withdraw(uint256 _amount) internal virtual returns(uint256);
 
-    function _deposit(uint256 _amountAsset) internal virtual;
+    function _deposit(uint256 _amount) internal virtual;
 
     function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
 
-    function migrate(BaseStrategy _newStrategy) external virtual onlyManagement returns(uint _amountAssets) {
-        _amountAssets = _harvestAndReport();
-        _withdraw(_amountAssets);
+    function migrate(BaseStrategy _newStrategy) external virtual onlyManagement returns(uint _amounts) {
+        _amounts = _harvestAndReport();
+        withdraw(_amounts);
 
         _newStrategy.deposit(_asset.balanceOf(address(this)));
 
         _totalAssets = 0;
 
-        emit Migrate(address(_newStrategy), _amountAssets);
+        emit Migrate(address(_newStrategy), _amounts);
     }
 
     function emergencyWithdraw() external onlyManagement virtual returns(uint _amount) {
         _amount = _lockAndTake();
 
-        SafeERC20.safeTransferFrom(_asset, address(this), _vault, _amount);
+        SafeERC20.safeTransfer(_asset, _vault, _amount);
 
         emit EmergencyWithdraw(block.timestamp, _amount);
     }
 
-    function pause() public virtual onlyKeeperOrManagement notPaused returns(uint _amountAssets) {
-        _amountAssets = _lockAndTake();
+    function pause() public virtual onlyKeeperOrManagement notPaused returns(uint _amounts) {
+        _amounts = _lockAndTake();
         
         emit Paused(block.timestamp);
     }
 
-    function _lockAndTake() internal returns(uint _amountAssets) {
+    function _lockAndTake() internal returns(uint _amounts) {
         _paused = true;
 
-        _amountAssets = _harvestAndReport();
-        _withdraw(_amountAssets);
+        _amounts = _harvestAndReport();
+        withdraw(_amounts);
     }
 
     function unpause() external virtual onlyManagement {

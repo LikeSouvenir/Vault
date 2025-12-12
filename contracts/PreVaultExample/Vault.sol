@@ -30,32 +30,32 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
 
     bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
-    mapping (BaseStrategy => uint) strategyBalancePersentMap;
+    mapping (BaseStrategy => uint) strategyBalancePercentMap;
     BaseStrategy[MAXIMUM_STRATEGIES] withdrawQueue;
 
     constructor(address manager) ERC4626(IERC20(new AssetERC20("Asset Token", "ASSET"))) ERC20("Share Token", "SHARE") {// string memory name_, string memory symbol_  
         _grantRole(DEFAULT_ADMIN_ROLE, manager);
     }
     
-    function straregySharePersent(BaseStrategy strategy) external view returns(uint) {
-        return strategyBalancePersentMap[strategy];
+    function strategySharePercent(BaseStrategy strategy) external view returns(uint) {
+        return strategyBalancePercentMap[strategy];
     }
 
-    function setSharePersent(BaseStrategy strategy, uint sharePersent) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(sharePersent > 0, "sharePersent must be > 0");
+    function setSharePercent(BaseStrategy strategy, uint sharePercent) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(sharePercent > 0, "sharePercent must be > 0");
 
-        uint currentPersent = strategyBalancePersentMap[strategy];
-        uint totalSharePersent;
+        uint currentPercent = strategyBalancePercentMap[strategy];
+        uint totalSharePercent;
         
         for (uint i = 0; i < withdrawQueue.length; i++) {
-            totalSharePersent += strategyBalancePersentMap[withdrawQueue[i]];
+            totalSharePercent += strategyBalancePercentMap[withdrawQueue[i]];
         }
 
-        require(totalSharePersent - currentPersent + sharePersent >= 100, "total share > 100%");
+        require(totalSharePercent - currentPercent + sharePercent <= 100, "total share <= 100%");
 
-        strategyBalancePersentMap[strategy] = sharePersent;
+        strategyBalancePercentMap[strategy] = sharePercent;
 
-        emit UpdateStrategySharePersent( strategy, sharePersent);
+        emit UpdateStrategySharePercent( address(strategy), sharePercent);
     }
 
     function reportsAndInvests() external onlyRole(KEEPER_ROLE) {
@@ -75,12 +75,12 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
     }
 
     function rebalance(BaseStrategy strategy) public onlyRole(KEEPER_ROLE) returns(uint maxAmount) {
-        uint balancePersent = strategyBalancePersentMap[strategy];
+        uint balancePercent = strategyBalancePercentMap[strategy];
 
-        require(balancePersent != 0, "strategy not found");
+        require(balancePercent != 0, "strategy not found");
 
         uint assetBalance = strategy.totalAssets();
-        maxAmount = totalAssets() * balancePersent / 100;
+        maxAmount = totalAssets() * balancePercent / 100;
         
         if (assetBalance < maxAmount) {
             IERC20(asset()).approve(address(strategy), maxAmount - assetBalance);
@@ -97,7 +97,7 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
     }
     
     function migrate(BaseStrategy oldStrategy, BaseStrategy newStrategy) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require (strategyBalancePersentMap[oldStrategy] != 0, "strategy not exist");
+        require (strategyBalancePercentMap[oldStrategy] != 0, "strategy not exist");
 
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
             if (withdrawQueue[i] == oldStrategy) {
@@ -111,7 +111,7 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
     }
 
     function remove(BaseStrategy strategy) external onlyRole(DEFAULT_ADMIN_ROLE) returns(uint amountAssets){
-        require (strategyBalancePersentMap[strategy] != 0, "strategy not exist");
+        require (strategyBalancePercentMap[strategy] != 0, "strategy not exist");
 
         bool find;
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
@@ -129,8 +129,8 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
         emit StrategyRemoved (address(strategy), amountAssets);
     }
 
-    function add(BaseStrategy newStrategy, uint sharePersent) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require (strategyBalancePersentMap[newStrategy] == 0, "strategy exist");
+    function add(BaseStrategy newStrategy, uint sharePercent) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require (strategyBalancePercentMap[newStrategy] == 0, "strategy exist");
         require (address(withdrawQueue[MAXIMUM_STRATEGIES - 1]) == address(0), "strategy count out of bounds");
 
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
@@ -139,7 +139,7 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
             }
         }
 
-        setSharePersent(newStrategy, sharePersent);
+        setSharePercent(newStrategy, sharePercent);
 
         emit StrategyAdded(address(newStrategy), newStrategy.performanceFee());
     }
@@ -168,7 +168,7 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
                 }
             }
 
-            require(needed != 0, "not enaugth");
+            require(needed == 0, "not enaugth");
         }
 
         super._withdraw(caller, receiver, owner, assets, shares);
@@ -184,7 +184,7 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
             }
             require (address(queue[i]) != address(0), "Cannot use to remove");
 
-            require (strategyBalancePersentMap[queue[i]] != 0, "Incorrect address");
+            require (strategyBalancePercentMap[queue[i]] != 0, "Incorrect address");
         }
 
         withdrawQueue = queue;
@@ -196,8 +196,8 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
         return withdrawQueue;
     }
 
-    function strategyPesent(address strategy) external view returns(uint sharePersent) {
-        return strategyBalancePersentMap[BaseStrategy(strategy)];
+    function strategyPesent(address strategy) external view returns(uint sharePercent) {
+        return strategyBalancePercentMap[BaseStrategy(strategy)];
     }
 
     function setManagementFee(uint16 fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -237,13 +237,13 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
     function pause(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
         strategy.pause();
 
-        emit StrategyUnpaused(address(strategy));
+        emit StrategyPaused(address(strategy));
     }
 
     function unpause(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
         strategy.unpause();
 
-        emit StrategyPaused(address(strategy));
+        emit StrategyUnpaused(address(strategy));
     }
 
 
@@ -255,7 +255,7 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
     
     event UpdateManagementFee(uint indexed fee);
     
-    event UpdateStrategySharePersent(address indexed strategy, uint newPersent);
+    event UpdateStrategySharePercent(address indexed strategy, uint newPercent);
 
     event StrategyAdded (address indexed strategy, uint256 performanceFee);
 
