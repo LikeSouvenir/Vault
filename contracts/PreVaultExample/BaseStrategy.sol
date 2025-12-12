@@ -9,6 +9,8 @@ import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 
 abstract contract BaseStrategy is ReentrancyGuard {
     uint constant TWELVE_MONTHS = 12;
+    /// @notice Seconds per year for max profit unlocking time.
+    uint256 internal constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
     uint16 constant DEFAULT_FEE = 200;
 
     uint _bps = 10_000;
@@ -21,7 +23,9 @@ abstract contract BaseStrategy is ReentrancyGuard {
     string _name;
     
     address _management; // Main address that can set all configurable variables.
-    address _keeper; // Address given permission to call {report} and {tend}.
+    address _keeper; // Address given permission to call 
+
+    uint lastTakeTime;
 
     constructor(
         address assetToken,
@@ -37,6 +41,8 @@ abstract contract BaseStrategy is ReentrancyGuard {
         _vault = vaultAddr;
 
         SafeERC20.forceApprove(_asset, _vault, type(uint256).max);// проверять при добавлении в addStrategy
+
+        lastTakeTime = block.timestamp;
     }
 
     /**
@@ -91,20 +97,22 @@ abstract contract BaseStrategy is ReentrancyGuard {
             (uint16 managementFee, address feeRecipient) = IFeeConfig(_vault).feeConfig();
             profit = newTotalAssets - _totalAssets;
             
-            uint currentPerformanceFee = (profit * _performanceFee) / _bps;
+            currentFee = (profit * _performanceFee) / _bps;
 
             if (managementFee != 0) {
-                // ДОЛЖНО БЫТЬ ВЫЗВАНО НЕ ЧАЩИ 1 РАЗА В МЕСЯЦ
+                uint oneMonth = SECONDS_PER_YEAR / TWELVE_MONTHS;
+
+                // ДОЛЖНО БЫТЬ ВЫЗВАНО НЕ ЧАЩИ 1 РАЗА В МЕСЯЦ   
                 //  если report вызывается реже или чаще, то managementFee будет неадекватным.
-                
-                // рекомендация - учитывать время при расчете управленческой комиссии
-                uint currentManagementFee  = ((newTotalAssets * managementFee) / _bps) / TWELVE_MONTHS;
-                
-                currentFee = currentManagementFee + currentPerformanceFee;
-            } else {
-                currentFee = currentPerformanceFee;
+                if (block.timestamp >= lastTakeTime) {
+                    lastTakeTime = block.timestamp + oneMonth;
+
+                    uint currentManagementFee  = ((newTotalAssets * managementFee) / _bps) / TWELVE_MONTHS;
+                    
+                    currentFee += currentManagementFee;
+                }
             }
-                
+            
             if (currentFee != 0) {
                 if (profit < currentFee) {
                     currentFee = profit;

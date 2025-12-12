@@ -32,7 +32,7 @@ contract Vault is ERC4626, IFeeConfig{
     address _management;
     address _keeper;
 
-    mapping (BaseStrategy => uint shares) strategyBalancePersentMap;
+    mapping (BaseStrategy => uint) strategyBalancePersentMap;
     BaseStrategy[MAXIMUM_STRATEGIES] withdrawQueue;
 
     constructor() ERC4626(IERC20(new AssetERC20("Asset Token", "ASSET"))) ERC20("Share Token", "SHARE") {
@@ -56,6 +56,62 @@ contract Vault is ERC4626, IFeeConfig{
         _;
     }
 //
+    function straregySharePersent(BaseStrategy strategy) external view returns(uint) {
+        return strategyBalancePersentMap[strategy];
+    }
+
+    function setSharePersent(BaseStrategy strategy, uint sharePersent) public onlyManagement {
+        require(sharePersent > 0, "sharePersent must be > 0");
+
+        uint currentPersent = strategyBalancePersentMap[strategy];
+        uint totalSharePersent;
+        
+        for (uint i = 0; i < withdrawQueue.length; i++) {
+            totalSharePersent += strategyBalancePersentMap[withdrawQueue[i]];
+        }
+
+        require(totalSharePersent - currentPersent + sharePersent >= 100, "total share > 100%");
+
+        strategyBalancePersentMap[strategy] = sharePersent;
+    }
+
+    function reportsAndInvests() external onlyKeeperOrManagement {
+        uint len = withdrawQueue.length;
+
+        for (uint i = 0; i < len; i++) {
+            BaseStrategy strategy = withdrawQueue[i];
+
+            strategy.report();
+        }
+
+        for (uint i = 0; i < len; i++) {
+            BaseStrategy strategy = withdrawQueue[i];
+
+            rebalance(strategy);
+        }
+    }
+
+    function rebalance(BaseStrategy strategy) public onlyKeeperOrManagement returns(uint maxAmount) {
+        uint balancePersent = strategyBalancePersentMap[strategy];
+
+        require(balancePersent != 0, "strategy not found");
+
+        uint assetBalance = strategy.totalAssets();
+        maxAmount = totalAssets() * balancePersent / 100;
+        
+        if (assetBalance < maxAmount) {
+            IERC20(asset()).approve(address(strategy), maxAmount - assetBalance);
+
+            strategy.deposit(maxAmount - assetBalance);
+
+        } else if (assetBalance > maxAmount)  {
+            IERC20(asset()).approve(address(strategy), assetBalance - maxAmount);
+
+            strategy.withdraw(assetBalance - maxAmount);
+        }
+
+        emit UpdateStrategyBalance(strategy, maxAmount);
+    }
     
     function migrate(BaseStrategy oldStrategy, BaseStrategy newStrategy) external onlyManagement {
         require (strategyBalancePersentMap[oldStrategy] != 0, "strategy not exist");
@@ -154,44 +210,6 @@ contract Vault is ERC4626, IFeeConfig{
 
     function getWithdrabalQueue() external view returns(BaseStrategy[MAXIMUM_STRATEGIES] memory) {
         return withdrawQueue;
-    }
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////переделать на цикл//////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-    function reportAndInvest(BaseStrategy strategy) external onlyKeeperOrManagement {
-        /* (uint256 profit, uint256 loss) = */ strategy.report();
-
-        updateStrategyBalance(strategy);
-    }
-
-    function updateStrategyBalance(BaseStrategy strategy) public onlyKeeperOrManagement returns(uint maxAmount) {
-        uint balancePersent = strategyBalancePersentMap[strategy];
-
-        require(balancePersent != 0, "strategy not found");
-
-        uint assetBalance = strategy.totalAssets();
-        maxAmount = totalAssets() * balancePersent / 100;
-        
-        if (assetBalance < maxAmount) {
-            IERC20(asset()).approve(address(strategy), maxAmount - assetBalance);
-
-            strategy.deposit(maxAmount - assetBalance);
-
-        } else if (assetBalance > maxAmount)  {
-            IERC20(asset()).approve(address(strategy), assetBalance - maxAmount);
-
-            strategy.withdraw(assetBalance - maxAmount);
-        }
-
-        emit UpdateStrategyBalance(strategy, maxAmount);
-    }
-
-    function setSharePersent(BaseStrategy strategy, uint sharePersent) public onlyManagement {
-        require(sharePersent > 0, "sharePersent must be > 0");
-        require(sharePersent <= 100, "sharePersent must be <= 100");
-
-        strategyBalancePersentMap[strategy] = sharePersent;
     }
 
     function strategyPesent(address strategy) external view returns(uint sharePersent) {
