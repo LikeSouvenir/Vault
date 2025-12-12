@@ -10,7 +10,7 @@ import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 abstract contract BaseStrategy is ReentrancyGuard {
     uint constant BPS = 10_000;
     uint16 constant DEFAULT_FEE = 200;
-    
+
     /// @notice Seconds per year for max profit unlocking time.
     uint256 internal constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
     uint constant TWELVE_MONTHS = 12;
@@ -75,6 +75,8 @@ abstract contract BaseStrategy is ReentrancyGuard {
         value = _withdraw(_amount);
 
         _totalAssets = available - _amount;
+
+        emit Withdraw(_totalAssets, _amount);
     }
 
     function deposit(uint256 _amountAsset) external virtual onlyKeeperOrManagement notPaused{
@@ -85,9 +87,9 @@ abstract contract BaseStrategy is ReentrancyGuard {
         _deposit(_amountAsset);
 
         _totalAssets += _amountAsset;
+        
+        emit Deposit(_totalAssets, _amountAsset);
     }
-
-    event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss, uint256 performanceFees);
 
     function report() external nonReentrant onlyKeeperOrManagement returns(uint256 profit, uint256 loss) {
         uint newTotalAssets = _harvestAndReport();
@@ -145,16 +147,22 @@ abstract contract BaseStrategy is ReentrancyGuard {
         _newStrategy.deposit(_asset.balanceOf(address(this)));
 
         _totalAssets = 0;
+
+        emit Migrate(address(_newStrategy), _amountAssets);
     }
 
     function emergencyWithdraw() external onlyManagement virtual returns(uint _amount) {
         _amount = _lockAndTake();
 
         SafeERC20.safeTransferFrom(_asset, address(this), _vault, _amount);
+
+        emit EmergencyWithdraw(block.timestamp, _amount);
     }
 
     function pause() public virtual onlyKeeperOrManagement notPaused returns(uint _amountAssets) {
         _amountAssets = _lockAndTake();
+        
+        emit Paused(block.timestamp);
     }
 
     function _lockAndTake() internal returns(uint _amountAssets) {
@@ -166,6 +174,8 @@ abstract contract BaseStrategy is ReentrancyGuard {
 
     function unpause() external virtual onlyManagement {
         _paused = false;
+
+        emit Unpaused(block.timestamp);
     }
 
     function asset() external virtual view returns(address) {
@@ -188,9 +198,27 @@ abstract contract BaseStrategy is ReentrancyGuard {
     function setPerformanceFee(uint16 newFee) external onlyManagement {
         require(newFee >= uint16(1), "min % is 0,01");
         _performanceFee = newFee;
+
+        emit UpdatePerformanceFee(newFee);
     }
 
     function performanceFee() external view returns(uint16) {
         return _performanceFee;
     }
+
+    event UpdatePerformanceFee(uint16 indexed newFee);
+    
+    event Unpaused(uint indexed timestamp);
+    
+    event Paused(uint indexed timestamp);
+    
+    event EmergencyWithdraw(uint timestamp, uint amount);
+    
+    event Migrate(address indexed newStrategy, uint amount);
+    
+    event Withdraw(uint256 indexed totalAssets, uint256 assetWithdraw);
+    
+    event Deposit(uint256 indexed totalAssets, uint256 assetWithdraw);
+    
+    event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss, uint256 performanceFees);
 }

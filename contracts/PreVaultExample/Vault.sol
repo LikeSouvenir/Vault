@@ -54,6 +54,8 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
         require(totalSharePersent - currentPersent + sharePersent >= 100, "total share > 100%");
 
         strategyBalancePersentMap[strategy] = sharePersent;
+
+        emit UpdateStrategySharePersent( strategy, sharePersent);
     }
 
     function reportsAndInvests() external onlyRole(KEEPER_ROLE) {
@@ -172,6 +174,7 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
         super._withdraw(caller, receiver, owner, assets, shares);
     }
 
+
     function setWithdrawalQueue(BaseStrategy[MAXIMUM_STRATEGIES] memory queue) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
             BaseStrategy oldQueue = withdrawQueue[i];
@@ -197,14 +200,18 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
         return strategyBalancePersentMap[BaseStrategy(strategy)];
     }
 
-    function setManagementFee(uint16 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_fee >= uint16(1), "min % is 0,01");
-        _managementFee = _fee;
+    function setManagementFee(uint16 fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(fee >= uint16(1), "min % is 0,01");
+        _managementFee = fee;
+
+        emit UpdateManagementFee(fee);
     }
 
     function setFeeRecipient(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(recipient >= address(0), "zero address");
         _feeRecipient = recipient;
+
+        emit UpdateManagementRecipient(recipient);
     }
 
     function feeConfig() external view returns (uint16, address) {
@@ -229,11 +236,26 @@ contract Vault is ERC4626, AccessControl, IFeeConfig{
 
     function pause(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
         strategy.pause();
+
+        emit StrategyUnpaused(address(strategy));
     }
 
     function unpause(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
         strategy.unpause();
+
+        emit StrategyPaused(address(strategy));
     }
+
+
+    event StrategyUnpaused(address indexed strategy);
+
+    event StrategyPaused(address indexed strategy);
+
+    event UpdateManagementRecipient(address indexed recipient);
+    
+    event UpdateManagementFee(uint indexed fee);
+    
+    event UpdateStrategySharePersent(address indexed strategy, uint newPersent);
 
     event StrategyAdded (address indexed strategy, uint256 performanceFee);
 
