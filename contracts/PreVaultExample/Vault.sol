@@ -6,61 +6,42 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
-/**
-Затем пользователь наблюдает за ростом баланса, доступного для вывода из волта. В любой момент он
-может передать свои share-токены обратно волту и получить то, что вложил, плюс накопленный 
-доход (yield), если стратегия была успешной.
-
-Синхронизировать доходы и убытки с волтом. 
- */
 
 import {Slots} from "../Vault/utils/elements.sol";
 import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 import {BaseStrategy} from "./BaseStrategy.sol";
 /**
- * синхронизация доходов
- * 
+все поля инициализированны
+get $ set методы
+events
+
+Access Control
  */
 
-contract Vault is ERC4626, IFeeConfig{
+contract Vault is ERC4626, AccessControl, IFeeConfig{
     uint constant BPS = 10_000;
     uint constant MAXIMUM_STRATEGIES = 20;
 
     uint16 _managementFee; // The percent in basis points of profit that is charged as a fee.
-    address feeRecipient; // The address to pay the `performanceFee` to.
+    address _feeRecipient; // The address to pay the `performanceFee` to.
 
     address _management;
     address _keeper;
 
+    bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
+
     mapping (BaseStrategy => uint) strategyBalancePersentMap;
     BaseStrategy[MAXIMUM_STRATEGIES] withdrawQueue;
 
-    constructor() ERC4626(IERC20(new AssetERC20("Asset Token", "ASSET"))) ERC20("Share Token", "SHARE") {
-         // string memory name_, string memory symbol_  
+    constructor(address manager) ERC4626(IERC20(new AssetERC20("Asset Token", "ASSET"))) ERC20("Share Token", "SHARE") {// string memory name_, string memory symbol_  
+        _grantRole(DEFAULT_ADMIN_ROLE, manager);
     }
-//
-    /**
-     * @dev Require that the call is coming from the strategies management.
-     */
-    modifier onlyManagement() {
-        require(msg.sender == _management, "management");
-        _;
-    }
-
-    /**
-     * @dev Require that the call is coming from either the strategies
-     * management or the keeper.
-     */
-    modifier onlyKeeperOrManagement() {
-        require(msg.sender == _keeper || msg.sender == _management, "keeper");
-        _;
-    }
-//
+    
     function straregySharePersent(BaseStrategy strategy) external view returns(uint) {
         return strategyBalancePersentMap[strategy];
     }
 
-    function setSharePersent(BaseStrategy strategy, uint sharePersent) public onlyManagement {
+    function setSharePersent(BaseStrategy strategy, uint sharePersent) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(sharePersent > 0, "sharePersent must be > 0");
 
         uint currentPersent = strategyBalancePersentMap[strategy];
@@ -75,7 +56,7 @@ contract Vault is ERC4626, IFeeConfig{
         strategyBalancePersentMap[strategy] = sharePersent;
     }
 
-    function reportsAndInvests() external onlyKeeperOrManagement {
+    function reportsAndInvests() external onlyRole(KEEPER_ROLE) {
         uint len = withdrawQueue.length;
 
         for (uint i = 0; i < len; i++) {
@@ -91,7 +72,7 @@ contract Vault is ERC4626, IFeeConfig{
         }
     }
 
-    function rebalance(BaseStrategy strategy) public onlyKeeperOrManagement returns(uint maxAmount) {
+    function rebalance(BaseStrategy strategy) public onlyRole(KEEPER_ROLE) returns(uint maxAmount) {
         uint balancePersent = strategyBalancePersentMap[strategy];
 
         require(balancePersent != 0, "strategy not found");
@@ -113,7 +94,7 @@ contract Vault is ERC4626, IFeeConfig{
         emit UpdateStrategyBalance(strategy, maxAmount);
     }
     
-    function migrate(BaseStrategy oldStrategy, BaseStrategy newStrategy) external onlyManagement {
+    function migrate(BaseStrategy oldStrategy, BaseStrategy newStrategy) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require (strategyBalancePersentMap[oldStrategy] != 0, "strategy not exist");
 
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
@@ -127,7 +108,7 @@ contract Vault is ERC4626, IFeeConfig{
         emit StrategyMigrated(address(oldStrategy), address(newStrategy));
     }
 
-    function remove(BaseStrategy strategy) external onlyManagement returns(uint amountAssets){
+    function remove(BaseStrategy strategy) external onlyRole(DEFAULT_ADMIN_ROLE) returns(uint amountAssets){
         require (strategyBalancePersentMap[strategy] != 0, "strategy not exist");
 
         bool find;
@@ -146,7 +127,7 @@ contract Vault is ERC4626, IFeeConfig{
         emit StrategyRemoved (address(strategy), amountAssets);
     }
 
-    function add(BaseStrategy newStrategy, uint sharePersent) external onlyManagement {
+    function add(BaseStrategy newStrategy, uint sharePersent) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require (strategyBalancePersentMap[newStrategy] == 0, "strategy exist");
         require (address(withdrawQueue[MAXIMUM_STRATEGIES - 1]) == address(0), "strategy count out of bounds");
 
@@ -191,7 +172,7 @@ contract Vault is ERC4626, IFeeConfig{
         super._withdraw(caller, receiver, owner, assets, shares);
     }
 
-    function setWithdrawalQueue(BaseStrategy[MAXIMUM_STRATEGIES] memory queue) external onlyManagement {
+    function setWithdrawalQueue(BaseStrategy[MAXIMUM_STRATEGIES] memory queue) external onlyRole(DEFAULT_ADMIN_ROLE) {
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
             BaseStrategy oldQueue = withdrawQueue[i];
 
@@ -216,8 +197,18 @@ contract Vault is ERC4626, IFeeConfig{
         return strategyBalancePersentMap[BaseStrategy(strategy)];
     }
 
+    function setManagementFee(uint16 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_fee >= uint16(1), "min % is 0,01");
+        _managementFee = _fee;
+    }
+
+    function setFeeRecipient(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(recipient >= address(0), "zero address");
+        _feeRecipient = recipient;
+    }
+
     function feeConfig() external view returns (uint16, address) {
-        return (_managementFee, feeRecipient);
+        return (_managementFee, _feeRecipient);
     }
 
     function totalAssets() public view override returns (uint256) {
@@ -236,11 +227,11 @@ contract Vault is ERC4626, IFeeConfig{
         return strategy.totalAssets();
     }
 
-    function pause(BaseStrategy strategy) external onlyKeeperOrManagement {
+    function pause(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
         strategy.pause();
     }
 
-    function unpause(BaseStrategy strategy) external onlyKeeperOrManagement {
+    function unpause(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
         strategy.unpause();
     }
 

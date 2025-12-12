@@ -8,12 +8,13 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 
 abstract contract BaseStrategy is ReentrancyGuard {
-    uint constant TWELVE_MONTHS = 12;
+    uint constant BPS = 10_000;
+    uint16 constant DEFAULT_FEE = 200;
+    
     /// @notice Seconds per year for max profit unlocking time.
     uint256 internal constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
-    uint16 constant DEFAULT_FEE = 200;
+    uint constant TWELVE_MONTHS = 12;
 
-    uint _bps = 10_000;
     uint _totalAssets;
 
     address _vault; // default manager
@@ -97,7 +98,7 @@ abstract contract BaseStrategy is ReentrancyGuard {
             (uint16 managementFee, address feeRecipient) = IFeeConfig(_vault).feeConfig();
             profit = newTotalAssets - _totalAssets;
             
-            currentFee = (profit * _performanceFee) / _bps;
+            currentFee = (profit * _performanceFee) / BPS;
 
             if (managementFee != 0) {
                 uint oneMonth = SECONDS_PER_YEAR / TWELVE_MONTHS;
@@ -107,12 +108,12 @@ abstract contract BaseStrategy is ReentrancyGuard {
                 if (block.timestamp >= lastTakeTime) {
                     lastTakeTime = block.timestamp + oneMonth;
 
-                    uint currentManagementFee  = ((newTotalAssets * managementFee) / _bps) / TWELVE_MONTHS;
+                    uint currentManagementFee  = ((newTotalAssets * managementFee) / BPS) / TWELVE_MONTHS;
                     
                     currentFee += currentManagementFee;
                 }
             }
-            
+
             if (currentFee != 0) {
                 if (profit < currentFee) {
                     currentFee = profit;
