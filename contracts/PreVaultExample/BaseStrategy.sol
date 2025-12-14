@@ -4,220 +4,95 @@ pragma solidity ^0.8.0;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 
-abstract contract BaseStrategy is ReentrancyGuard {
-    uint constant BPS = 10_000;
-    uint16 constant DEFAULT_FEE = 200;
-
-    /// @notice Seconds per year for max profit unlocking time.
-    uint256 internal constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
-    uint constant TWELVE_MONTHS = 12;
-
-    uint _totalAssets;
-
-    address _vault; // default manager
-    ERC20 _asset;
-    bool _paused;
-    uint16 _performanceFee = DEFAULT_FEE; // The percent in basis points of profit that is charged as a fee.
+abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
+    address immutable _vault; // default manager
+    ERC20 immutable _asset;
     string _name;
+    uint _lastTotalAssets;
     
-    address _management; // Main address that can set all configurable variables.
-    address _keeper; // Address given permission to call 
-
-    uint lastTakeTime;
+    bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
     constructor(
-        address assetToken,
-        string memory name,    
-        address management,
-        address keeper, // BOT,
-        address vaultAddr
+        address assetToken_,
+        string memory name_,    
+        address vault_
     ) {
-        _asset = ERC20(assetToken);
-        _name = name;
-        _management = management;
-        _keeper = keeper;
-        _vault = vaultAddr;
+        _asset = ERC20(assetToken_);
+        _name = name_;
+        _vault = vault_;
 
         SafeERC20.forceApprove(_asset, _vault, type(uint256).max);// проверять при добавлении в addStrategy
-
-        lastTakeTime = block.timestamp;
+        
+        _grantRole(DEFAULT_ADMIN_ROLE, vault_);
     }
-
     /**
-     * @dev Require that the call is coming from the strategies management.
-     */
-    modifier onlyManagement() {
-        require(msg.sender == _management || msg.sender == _vault, "management");
+    все поля инициализированны
+    get & set методы
+    events
+    Access Control
+ */
+
+    modifier onlyVault() {
+        require(msg.sender == _vault, "vault");
         _;
     }
 
-    /**
-     * @dev Require that the call is coming from either the strategies
-     * management or the keeper.
-     */
-    modifier onlyKeeperOrManagement() {
-        require(msg.sender == _keeper || msg.sender == _management || msg.sender == _vault, "keeper");
-        _;
+    function push(uint256 _amount) external virtual nonReentrant onlyVault{
+        SafeERC20.safeTransfer(_asset, address(this), _amount);
+
+        _push(_amount);
+        _lastTotalAssets += _amount;
+
+        emit Deposit(_amount);
     }
 
-    modifier notPaused() {
-        require(_paused == false, "is paused");
-        _;
-    }
-
-
-    function withdraw(uint256 _amount) public virtual nonReentrant onlyKeeperOrManagement notPaused returns(uint256 value) {
+    function pull(uint256 _amount) external virtual nonReentrant onlyVault returns(uint256 value) {
         uint available = _harvestAndReport();
         require(_amount <= available, "insufficient assets");
 
-        value = _withdraw(_amount);
-
-        _totalAssets -= value;
-
-        emit Withdraw(_totalAssets, value);
-    }
-
-    function deposit(uint256 _amount) public virtual onlyKeeperOrManagement notPaused{
-        require(_amount <= _asset.allowance(_vault, address(this)), "not enaugth allowance");
-        SafeERC20.safeTransferFrom(_asset, _vault, address(this), _amount);
-
-        _deposit(_amount);
-
-        _totalAssets -= _amount;
-        
-        emit Deposit(_totalAssets, _amount);
-    }
-
-    function report() external nonReentrant onlyKeeperOrManagement returns(uint256 profit, uint256 loss) {
-        uint newTotalAssets = _harvestAndReport();
-        uint currentFee;
-
-        // Calculate profit/loss.
-        if (newTotalAssets > _totalAssets) {
-            (uint16 managementFee, address feeRecipient) = IFeeConfig(_vault).feeConfig();
-            profit = newTotalAssets - _totalAssets;
-            
-            currentFee = (profit * _performanceFee) / BPS;
-
-            if (managementFee != 0) {
-                uint oneMonth = SECONDS_PER_YEAR / TWELVE_MONTHS;
-                uint monthsPassed = (block.timestamp - lastTakeTime) / oneMonth;
-
-                if (monthsPassed > 0) {
-                    // Комиссия за каждый прошедший месяц
-                    uint monthlyFee = (newTotalAssets * managementFee) / BPS / TWELVE_MONTHS;
-
-                    lastTakeTime += monthsPassed * oneMonth;
-                    currentFee += monthlyFee * monthsPassed;
-                }
-            }
-
-            if (currentFee != 0) {
-                if (profit < currentFee) {
-                    currentFee = profit;
-                }
-
-                withdraw(currentFee);
-
-                SafeERC20.safeTransfer(_asset, feeRecipient, currentFee);
-            }
-        } else {
-            loss = _totalAssets - newTotalAssets;
-        }
-
-        _totalAssets = newTotalAssets - currentFee;
-
-        emit Report(block.timestamp, profit, loss, currentFee);
-    }
-
-    function _withdraw(uint256 _amount) internal virtual returns(uint256);
-
-    function _deposit(uint256 _amount) internal virtual;
-
-    function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
-
-    function migrate(BaseStrategy _newStrategy) external virtual onlyManagement returns(uint _amounts) {
-        _amounts = _harvestAndReport();
-        withdraw(_amounts);
-
-        _newStrategy.deposit(_asset.balanceOf(address(this)));
-
-        _totalAssets = 0;
-
-        emit Migrate(address(_newStrategy), _amounts);
-    }
-
-    function emergencyWithdraw() external onlyManagement virtual returns(uint _amount) {
-        _amount = _lockAndTake();
+        value = _pull(_amount);
+        _lastTotalAssets -= value;
 
         SafeERC20.safeTransfer(_asset, _vault, _amount);
 
-        emit EmergencyWithdraw(block.timestamp, _amount);
+        emit Withdraw(value);
     }
 
-    function pause() public virtual onlyKeeperOrManagement notPaused returns(uint _amounts) {
-        _amounts = _lockAndTake();
-        
-        emit Paused(block.timestamp);
+    function report() external nonReentrant onlyRole(KEEPER_ROLE) returns(uint256 profit, uint256 loss) {
+        uint newTotalAssets = _harvestAndReport();
+
+        // Calculate profit/loss.
+        if (newTotalAssets > _lastTotalAssets) {
+            profit = newTotalAssets - _lastTotalAssets;
+        } else {
+            loss = newTotalAssets - _lastTotalAssets;
+        }
+        _lastTotalAssets = newTotalAssets;
+
+        emit Report(block.timestamp, profit, loss);
     }
 
-    function _lockAndTake() internal returns(uint _amounts) {
-        _paused = true;
+    function _pull(uint256 _amount) internal virtual returns(uint256);
 
-        _amounts = _harvestAndReport();
-        withdraw(_amounts);
-    }
+    function _push(uint256 _amount) internal virtual;
 
-    function unpause() external virtual onlyManagement {
-        _paused = false;
-
-        emit Unpaused(block.timestamp);
-    }
+    function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
 
     function asset() external virtual view returns(address) {
         return address(_asset);
     }
 
-
-    function totalAssets() external virtual view returns(uint) {
-        return _totalAssets;
-    }
-
     function vault() external virtual view returns(address) {
         return _vault;
     }
-
-    function isPaused() external virtual view returns(bool) {
-        return _paused;
-    }
-
-    function setPerformanceFee(uint16 newFee) external onlyManagement {
-        require(newFee >= uint16(1), "min % is 0,01");
-        _performanceFee = newFee;
-
-        emit UpdatePerformanceFee(newFee);
-    }
-
-    function performanceFee() external view returns(uint16) {
-        return _performanceFee;
-    }
-
-    event UpdatePerformanceFee(uint16 indexed newFee);
     
-    event Unpaused(uint indexed timestamp);
+    event Withdraw(uint256 assetWithdraw);
     
-    event Paused(uint indexed timestamp);
+    event Deposit(uint256 assetWithdraw);
     
-    event EmergencyWithdraw(uint timestamp, uint amount);
-    
-    event Migrate(address indexed newStrategy, uint amount);
-    
-    event Withdraw(uint256 indexed totalAssets, uint256 assetWithdraw);
-    
-    event Deposit(uint256 indexed totalAssets, uint256 assetWithdraw);
-    
-    event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss, uint256 performanceFees);
+    event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss);
 }
