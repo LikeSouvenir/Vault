@@ -8,12 +8,19 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 
+interface IVault {
+    function report(BaseStrategy strategy) external;
+    function rebalance(BaseStrategy strategy) external returns(uint amount);
+}
+
 abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
     address immutable _vault; // default manager
     ERC20 immutable _asset;
-    string _name;
+
     uint _lastTotalAssets;
-    
+    string _name;
+    bool _isPaused;
+
     bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
     constructor(
@@ -25,23 +32,27 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         _name = name_;
         _vault = vault_;
 
-        SafeERC20.forceApprove(_asset, _vault, type(uint256).max);// проверять при добавлении в addStrategy
+        SafeERC20.forceApprove(_asset, _vault, type(uint256).max);
         
         _grantRole(DEFAULT_ADMIN_ROLE, vault_);
     }
     /**
-    все поля инициализированны
-    get & set методы
-    events
     Access Control
+    функция присваивания роли БОТу
  */
 
-    modifier onlyVault() {
-        require(msg.sender == _vault, "vault");
-        _;
+    function _pull(uint256 _amount) internal virtual returns(uint256);
+
+    function _push(uint256 _amount) internal virtual;
+
+    function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
+
+    function reportAndInvest() external virtual onlyRole(KEEPER_ROLE) nonReentrant{
+        IVault(_vault).report(this);
+        IVault(_vault).rebalance(this);
     }
 
-    function push(uint256 _amount) external virtual nonReentrant onlyVault{
+    function push(uint256 _amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         SafeERC20.safeTransfer(_asset, address(this), _amount);
 
         _push(_amount);
@@ -50,7 +61,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         emit Deposit(_amount);
     }
 
-    function pull(uint256 _amount) external virtual nonReentrant onlyVault returns(uint256 value) {
+    function pull(uint256 _amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns(uint256 value) {
         uint available = _harvestAndReport();
         require(_amount <= available, "insufficient assets");
 
@@ -62,25 +73,38 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         emit Withdraw(value);
     }
 
-    function report() external nonReentrant onlyRole(KEEPER_ROLE) returns(uint256 profit, uint256 loss) {
+    function report() external virtual nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) returns(uint256 profit, uint256 loss) {
         uint newTotalAssets = _harvestAndReport();
 
         // Calculate profit/loss.
         if (newTotalAssets > _lastTotalAssets) {
             profit = newTotalAssets - _lastTotalAssets;
         } else {
-            loss = newTotalAssets - _lastTotalAssets;
+            loss = _lastTotalAssets - newTotalAssets;
         }
         _lastTotalAssets = newTotalAssets;
 
         emit Report(block.timestamp, profit, loss);
     }
 
-    function _pull(uint256 _amount) internal virtual returns(uint256);
+    function pause() public onlyRole(DEFAULT_ADMIN_ROLE)  {
+        uint newTotalAssets = _harvestAndReport();
+        _isPaused = true;
+        _pull(newTotalAssets);
 
-    function _push(uint256 _amount) internal virtual;
+        emit StrategyPaused(block.timestamp);
+    }
 
-    function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE)  {
+        _isPaused = false;
+        _push(_asset.balanceOf(address(this)));
+
+        emit StrategyUnpaused(block.timestamp);
+    }
+
+    function isPaused() external virtual view returns(bool) {
+        return _isPaused;
+    }
 
     function asset() external virtual view returns(address) {
         return address(_asset);
@@ -89,6 +113,18 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
     function vault() external virtual view returns(address) {
         return _vault;
     }
+
+    function lastTotalAssets() external virtual view returns(uint) {
+        return _lastTotalAssets;
+    }
+
+    function name() external virtual view returns(string memory) {
+        return _name;
+    }
+
+    event StrategyUnpaused(uint indexed timestamp);
+
+    event StrategyPaused(uint indexed timestamp);
     
     event Withdraw(uint256 assetWithdraw);
     
