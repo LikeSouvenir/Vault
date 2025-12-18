@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../Vault/AssetERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -46,6 +45,10 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         ERC4626(assetToken_) 
         ERC20(nameShare_, sybolShare_) 
     {
+        require(feeRecipient_ != address(0), "feeRecipient zero address");
+        require(address(assetToken_) != address(0), "assetToken zero address");
+        require(manager_ != address(0), "manager zero address");
+        
         _grantRole(DEFAULT_ADMIN_ROLE, manager_);
         _feeRecipient = feeRecipient_;
     }

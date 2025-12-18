@@ -21,7 +21,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
     string _name;
     bool _isPaused;
 
-    bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
+    bytes32 public constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
     constructor(
         address assetToken_,
@@ -35,11 +35,8 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         SafeERC20.forceApprove(_asset, _vault, type(uint256).max);
         
         _grantRole(DEFAULT_ADMIN_ROLE, vault_);
+        _grantRole(KEEPER_ROLE, vault_);
     }
-    /**
-    Access Control
-    функция присваивания роли БОТу
- */
 
     function _pull(uint256 _amount) internal virtual returns(uint256);
 
@@ -47,17 +44,17 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
 
     function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
 
-    function reportAndInvest() external virtual onlyRole(KEEPER_ROLE) nonReentrant{
+    function reportAndInvest() external virtual onlyRole(KEEPER_ROLE) {
         IVault(_vault).report(this);
         IVault(_vault).rebalance(this);
     }
 
     function push(uint256 _amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
-        SafeERC20.safeTransfer(_asset, address(this), _amount);
+        SafeERC20.safeTransferFrom(_asset, msg.sender, address(this), _amount);
 
         _push(_amount);
         _lastTotalAssets += _amount;
-
+        
         emit Deposit(_amount);
     }
 
@@ -65,10 +62,10 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         uint available = _harvestAndReport();
         require(_amount <= available, "insufficient assets");
 
+        _lastTotalAssets -= _amount;
         value = _pull(_amount);
-        _lastTotalAssets -= value;
 
-        SafeERC20.safeTransfer(_asset, _vault, _amount);
+        SafeERC20.safeTransfer(_asset, msg.sender, value);
 
         emit Withdraw(value);
     }
