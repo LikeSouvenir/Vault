@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
 import {BaseStrategy} from "./BaseStrategy.sol";
 /**
     Access Control
@@ -20,6 +19,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     uint internal constant BPS = 10_000;
     uint internal constant MAXIMUM_STRATEGIES = 20;
     uint16 internal constant DEFAULT_PERFORMANCE_FEE = 100;
+    uint16 internal constant DEFAULT_MANAGMENT_FEE = 100;
 
     /// @notice Seconds per year for max profit unlocking time.
     uint256 internal constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
@@ -30,7 +30,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     address _feeRecipient; // The address to pay the `performanceFee` to.
     BaseStrategy[MAXIMUM_STRATEGIES] withdrawQueue;
 
-    bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
+    bytes32 public constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
     struct StrategyBalance {
         uint balance;
@@ -48,19 +48,16 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         require(feeRecipient_ != address(0), "feeRecipient zero address");
         require(address(assetToken_) != address(0), "assetToken zero address");
         require(manager_ != address(0), "manager zero address");
+
+        _managementFee = DEFAULT_MANAGMENT_FEE;
+        _feeRecipient = feeRecipient_;
         
         _grantRole(DEFAULT_ADMIN_ROLE, manager_);
-        _feeRecipient = feeRecipient_;
     }
 
     modifier checkBorderBPS(uint16 num) {
         require(num >= uint16(1), "min % is 0,01");
         require(num <= uint16(10_000), "max % is 100");
-        _;
-    }
-
-    modifier strategyExist(BaseStrategy strategy) {
-        require (strategyBalanceMap[strategy].sharePercent != 0, "strategy not exist");
         _;
     }
 
@@ -93,7 +90,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
 //
     function add(BaseStrategy newStrategy, uint16 sharePercent) external onlyRole(DEFAULT_ADMIN_ROLE) checkAsset(newStrategy) checkVault(newStrategy){
         require (ERC20(asset()).allowance(address(newStrategy), address(this)) == type(uint256).max, "must allowance type(uint256).max");
-        require (address(withdrawQueue[MAXIMUM_STRATEGIES - 1]) != address(0), "limited of strategy");
+        require (address(withdrawQueue[MAXIMUM_STRATEGIES - 1]) == address(0), "limited of strategy");
 
         StrategyBalance storage info = strategyBalanceMap[newStrategy];
 
@@ -126,7 +123,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         
                 withdrawQueue[i] = newStrategy;
 
-                report(oldStrategy);
+                _report(oldStrategy);
                 uint balance = oldStrategy.pull(info.balance);
 
                 newStrategy.push(balance);
@@ -185,24 +182,6 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
 
     }
 
-    function maxWithdraw(address owner) public view override returns (uint256) {
-        uint256 totalAvailable = totalAssets();
-        
-        uint256 maxShares = balanceOf(owner);
-        uint256 maxAssets = convertToAssets(maxShares);
-        
-        return maxAssets < totalAvailable ? maxAssets : totalAvailable;
-    }
-
-    function maxRedeem(address owner) public view override returns (uint256) {
-        uint256 totalAvailable = totalAssets();
-        
-        uint256 maxShares = balanceOf(owner);
-        uint256 sharesFromLiquidity = convertToShares(totalAvailable);
-        
-        return maxShares < sharesFromLiquidity ? maxShares : sharesFromLiquidity;
-    }
-    
     function reportsAndInvests() external nonReentrant onlyRole(KEEPER_ROLE) {
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
             BaseStrategy strategy = withdrawQueue[i];
@@ -295,11 +274,12 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         emit UpdateStrategyBalance(strategy, amount);
     }
 
-    function remove(BaseStrategy strategy) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant strategyExist(strategy) returns(uint amountAssets){
+    function remove(BaseStrategy strategy) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant  returns(uint amountAssets){
+        require (strategyBalanceMap[strategy].sharePercent != 0, "strategy not exist");
         bool find;
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
             if (withdrawQueue[i] == strategy) {
-                report(strategy);
+                _report(strategy);
 
                 amountAssets = strategy.pull(strategyBalanceMap[strategy].balance);
                 
@@ -325,7 +305,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
             BaseStrategy newPos = queue[i];
 
             require (address(newPos) != address(0), "Cannot use to remove");
-            require (strategyBalanceMap[newPos].sharePercent != 0, "Incorrect address");
+            require (strategyBalanceMap[newPos].sharePercent != 0, "Cannot use to change strategies");
         }
 
         withdrawQueue = queue;
@@ -367,7 +347,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     }
 
     function setFeeRecipient(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(recipient >= address(0), "zero address");
+        require(recipient != address(0), "zero address");
         _feeRecipient = recipient;
 
         emit UpdateManagementRecipient(recipient);
@@ -400,14 +380,28 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         strategy.unpause();
     }
 
+    function maxWithdraw(address owner) public view override returns (uint256) {
+        uint256 totalAvailable = totalAssets();
+        
+        uint256 maxShares = balanceOf(owner);
+        uint256 maxAssets = convertToAssets(maxShares);
+        
+        return maxAssets < totalAvailable ? maxAssets : totalAvailable;
+    }
+
+    function maxRedeem(address owner) public view override returns (uint256) {
+        uint256 totalAvailable = totalAssets();
+        
+        uint256 maxShares = balanceOf(owner);
+        uint256 sharesFromLiquidity = convertToShares(totalAvailable);
+        
+        return maxShares < sharesFromLiquidity ? maxShares : sharesFromLiquidity;
+    }
+
     function withdrabalQueue() external view returns(BaseStrategy[MAXIMUM_STRATEGIES] memory) {
         return withdrawQueue;
     }
-
-    function strategyPersent(BaseStrategy strategy) external view returns(uint16 sharePercent) {
-        return strategyBalanceMap[strategy].sharePercent;
-    }
-
+    
     function performanceFee(BaseStrategy strategy) external view returns(uint16) {
         return strategyBalanceMap[strategy].performanceFee;
     }

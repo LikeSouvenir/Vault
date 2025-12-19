@@ -263,9 +263,9 @@ contract BaseStrategyWrapperTest is Test{
     //             events                   //
     //////////////////////////////////////////
     
-    event Withdraw(uint256 assetWithdraw);
+    event Pull(uint256 assetPull);
     
-    event Deposit(uint256 assetWithdraw);
+    event Push(uint256 assetPush);
     
     event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss);
 
@@ -273,7 +273,46 @@ contract BaseStrategyWrapperTest is Test{
 
     event StrategyPaused(uint indexed timestamp);
 
-    //Withdraw - Report
+    function test_eventPull() external {
+        uint depValue = 10_000;
+        _push10_000FromVault(depValue);
+
+        vm.startPrank(address(vaultMock));
+        (uint256 profit, uint loss) = strategyWrapper.report();
+        
+        vm.expectEmit(true, false, false, false);
+        emit Pull(depValue + profit - loss);
+
+        strategyWrapper.pull(depValue);
+    }
+
+    function test_eventPush() external {
+        uint depValue = 10_000;
+
+        vm.startPrank(address(vaultMock));
+        erc20Mock.approve(address(strategyWrapper), depValue);
+        
+        vm.expectEmit(true, false, false, false);
+        emit Push(depValue);
+        strategyWrapper.push(depValue);
+    }
+
+    function test_eventReport() external {
+        uint depValue = 10_000;
+        _push10_000FromVault(depValue);
+
+        uint expercterProfit = stackingMock.calculateProfit(depValue);
+        uint expercterLoss = 0;
+
+        vm.expectEmit(true, true, true, false);
+        emit Report(block.timestamp, expercterProfit, expercterLoss);
+
+        vm.prank(address(vaultMock));
+        (uint256 profit, uint loss) = strategyWrapper.report();
+
+        vm.assertEq(expercterProfit, profit);
+        vm.assertEq(expercterLoss, loss);
+    }
 
     function test_eventPause() external {
         vm.expectEmit(true, false, false, false);

@@ -6,8 +6,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
-import {IFeeConfig} from "./interfaces/IFeeConfig.sol";
-
 interface IVault {
     function report(BaseStrategy strategy) external;
     function rebalance(BaseStrategy strategy) external returns(uint amount);
@@ -25,7 +23,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
 
     constructor(
         address assetToken_,
-        string memory name_,    
+        string memory name_,
         address vault_
     ) {
         _asset = ERC20(assetToken_);
@@ -55,7 +53,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         _push(_amount);
         _lastTotalAssets += _amount;
         
-        emit Deposit(_amount);
+        emit Push(_amount);
     }
 
     function pull(uint256 _amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns(uint256 value) {
@@ -67,7 +65,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
 
         SafeERC20.safeTransfer(_asset, msg.sender, value);
 
-        emit Withdraw(value);
+        emit Pull(value);
     }
 
     function report() external virtual nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) returns(uint256 profit, uint256 loss) {
@@ -123,9 +121,9 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
 
     event StrategyPaused(uint indexed timestamp);
     
-    event Withdraw(uint256 assetWithdraw);
+    event Pull(uint256 assetPull);
     
-    event Deposit(uint256 assetWithdraw);
+    event Push(uint256 assetPush);
     
     event Report(uint indexed time, uint256 indexed profit, uint256 indexed loss);
 }
