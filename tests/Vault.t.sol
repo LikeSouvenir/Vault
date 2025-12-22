@@ -24,6 +24,8 @@ contract VaultTest is Test {
     uint constant MAXIMUM_STRATEGIES = 20;
     bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
+
+    uint constant DEFAULT_USER_BALANCE = 10_000e18;
     uint16 constant TEST_INVEST_VALUE = 10_000;
     uint16 constant TEST_STRATEGY_SHARE_PERSENT = 1_000;
     string constant VAULT_NAME_SHARE_TOKEN = "vaultShare";
@@ -44,6 +46,8 @@ contract VaultTest is Test {
     address user3 = vm.addr(6);
 
     function setUp() public {
+        vm.warp(1766389559);
+
         erc20Mock = new Erc20Mock();
         stackingMock = new StackingMock(erc20Mock);
         vault = new Vault(erc20Mock, VAULT_NAME_SHARE_TOKEN, VAULT_SYMBOL_SHARE_TOKEN, manager, feeRecipient);
@@ -51,11 +55,12 @@ contract VaultTest is Test {
         strategyOne = new StackingStrategyMock(stackingMock, erc20Mock, address(vault));
         strategyTwo = new StackingStrategyMock(stackingMock, erc20Mock, address(vault));
 
-        uint DEFAULT_USER_BALANCE = 10_000 * 10 ** erc20Mock.decimals();
-
         erc20Mock.mint(user1, DEFAULT_USER_BALANCE);
         erc20Mock.mint(user2, DEFAULT_USER_BALANCE);
         erc20Mock.mint(user3, DEFAULT_USER_BALANCE);
+        
+        vm.prank(manager);
+        vault.grantRole(KEEPER_ROLE, keeper);
     }
 
     event UpdateManagementRecipient(address indexed recipient);
@@ -90,45 +95,70 @@ contract VaultTest is Test {
         vault.add(strategyOne, TEST_STRATEGY_SHARE_PERSENT);
     }
 
+    function _setUpWithStrategyOneAndTwoWithMaxSharePersent() internal {
+        vm.startPrank(manager);
+        vault.add(strategyOne, MAX_PERSENT / 2);
+        vault.add(strategyTwo, MAX_PERSENT / 2);
+        vm.stopPrank();
+    }
+
     function _setUpWithLiquidityStrategyOne() internal {
         _setUpWithStrategyOne();
-        vault.grantRole(KEEPER_ROLE, keeper);
         vault.setSharePercent(strategyOne, MAX_PERSENT);
         vm.stopPrank();
 
-        vm.startPrank(user1);
-        erc20Mock.approve(address(vault), TEST_INVEST_VALUE);
-        vault.deposit(TEST_INVEST_VALUE, user1);
-        vm.stopPrank();
+        _depositFrom(user2);
 
         vm.prank(address(keeper));
         vault.rebalance(strategyOne);
     } 
-    function test_reportsAndInvests() external {
-        _setUpWithLiquidityStrategyOne();
+
+    function _depositFrom(address user) internal {
+        vm.startPrank(user);
+        erc20Mock.approve(address(vault), TEST_INVEST_VALUE);
+        vault.deposit(TEST_INVEST_VALUE, user);
+        vm.stopPrank();
+    }
+
+    function test_notEnaugthVaultToken_withdraw() external {
+        _setUpWithStrategyOneAndTwoWithMaxSharePersent();
+
+        _depositFrom(user2);
+        _depositFrom(user3);
+
+        vm.prank(address(keeper));
+        vault.reportsAndInvests();
+
+        uint vaultBalance = erc20Mock.balanceOf(address(vault));
+        vm.assertEq(vaultBalance, 0);
+
+        uint user2Balance = erc20Mock.balanceOf(user2);
 
         vm.startPrank(user2);
-        erc20Mock.approve(address(vault), TEST_INVEST_VALUE);
-        vault.deposit(TEST_INVEST_VALUE, user1);
-        vm.stopPrank();
+        vault.withdraw(TEST_INVEST_VALUE, user2, user2);
 
-        uint expectedProfit = stackingMock.calculateProfit(TEST_INVEST_VALUE * 2);
-        uint performanceFee = vault.strategyPerformanceFee(strategyOne);
+        vm.assertEq(user2Balance + TEST_INVEST_VALUE, DEFAULT_USER_BALANCE);
+    }
 
-        uint expectedPerformanceFee = ((expectedProfit * performanceFee) / BPS) * 2;
+    function test_reportsAndInvests() external {
+        _setUpWithStrategyOneAndTwoWithMaxSharePersent();
 
-        console.log(expectedProfit);
-        console.log(performanceFee);
-        console.log(expectedPerformanceFee);
+        _depositFrom(user2);
 
-        vm.expectEmit(true, true, true, true);
-        emit Reported(expectedProfit, 0, 0, expectedPerformanceFee);
+        uint balanceStrategyOne = vault.strategyBalance(strategyOne);
+        uint balanceStrategyTwo = vault.strategyBalance(strategyTwo);
+
+        vm.assertEq(balanceStrategyOne, 0);
+        vm.assertEq(balanceStrategyTwo, 0);
 
         vm.startPrank(keeper);
         vault.reportsAndInvests();
 
-        uint recipientBalance = vault.balanceOf(feeRecipient);
-        vm.assertEq(recipientBalance, expectedPerformanceFee);
+        balanceStrategyOne = vault.strategyBalance(strategyOne);
+        balanceStrategyTwo = vault.strategyBalance(strategyTwo);
+
+        vm.assertEq(balanceStrategyOne, TEST_INVEST_VALUE / 2);
+        vm.assertEq(balanceStrategyTwo, TEST_INVEST_VALUE / 2);
     }
 
     function test_withManagmentFee_report() external {
@@ -142,15 +172,15 @@ contract VaultTest is Test {
         uint expectedPerformanceFee = expectedProfit * performanceFee / BPS;
         uint expectedManagementFee = strategyBalance * managementFee / BPS / 12;
 
-        vm.expectEmit(true, true, false, true);
+        vm.expectEmit(true, true, true, true);
         emit Reported(expectedProfit, 0, expectedManagementFee, expectedPerformanceFee);
 
-        vm.roll(block.timestamp + 32 days);
+        vm.warp(block.timestamp + 32 days);
         vm.startPrank(keeper);
         vault.report(strategyOne);  
-
+        
         uint recipientBalance = vault.balanceOf(feeRecipient);
-        vm.assertEq(recipientBalance, expectedPerformanceFee);
+        vm.assertEq(recipientBalance, expectedPerformanceFee + expectedManagementFee);
     }
 
     function test_withLoss_report() external {
@@ -278,16 +308,14 @@ contract VaultTest is Test {
     }
 
     function test_rebalance() external {
+        // first
         _setUpWithLiquidityStrategyOne();
 
         uint strategyOneLastTotalAsset = strategyOne.lastTotalAssets();
         vm.assertEq(strategyOneLastTotalAsset, TEST_INVEST_VALUE);
 
         // second
-        vm.startPrank(user1);
-        erc20Mock.approve(address(vault), TEST_INVEST_VALUE);
-        vault.deposit(TEST_INVEST_VALUE, user1);
-        vm.stopPrank();
+        _depositFrom(user1);
 
         vm.prank(address(keeper));
         vault.rebalance(strategyOne);
@@ -401,10 +429,9 @@ contract VaultTest is Test {
         _setUpWithStrategyOne();
         vm.stopPrank();
 
-        vm.startPrank(user1);
-        erc20Mock.approve(address(vault), TEST_INVEST_VALUE);
-        vault.deposit(TEST_INVEST_VALUE, user1);
+        _depositFrom(user1);
 
+        vm.startPrank(user1);
         totalAssets = vault.maxWithdraw(user1);
         vm.assertEq(totalAssets, TEST_INVEST_VALUE);
     }
@@ -416,10 +443,9 @@ contract VaultTest is Test {
         _setUpWithStrategyOne();
         vm.stopPrank();
 
-        vm.startPrank(user1);
-        erc20Mock.approve(address(vault), TEST_INVEST_VALUE);
-        vault.deposit(TEST_INVEST_VALUE, user1);
+        _depositFrom(user1);
 
+        vm.startPrank(user1);
         max = vault.maxWithdraw(user1);
         vm.assertEq(max, TEST_INVEST_VALUE);
     }
@@ -431,10 +457,9 @@ contract VaultTest is Test {
         _setUpWithStrategyOne();
         vm.stopPrank();
 
-        vm.startPrank(user1);
-        erc20Mock.approve(address(vault), TEST_INVEST_VALUE);
-        vault.deposit(TEST_INVEST_VALUE, user1);
+        _depositFrom(user1);
 
+        vm.startPrank(user1);
         max = vault.maxRedeem(user1);
         vm.assertEq(max, TEST_INVEST_VALUE);
     }

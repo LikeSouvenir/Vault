@@ -164,14 +164,18 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
                 if (info.balance == 0) {
                     continue;
                 }
-            
-                uint result = currentStrategy.pull(needed < info.balance ? needed : info.balance);
 
-                info.balance -= result;
-                needed -= result;
-                if (needed == 0) {
+                uint take = needed < info.balance ? needed : info.balance;
+            
+                uint result = currentStrategy.pull(take);
+                info.balance -= take;
+
+                if (needed <= result) {
+                    needed = 0;
                     break;
-                } 
+                }
+
+                needed -= result;
             }
             
             require(needed == 0, "not enaugth");
@@ -206,7 +210,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
                 continue;
             }
 
-            rebalance(strategy);
+            _rebalance(strategy);
         }
     }
 
@@ -248,7 +252,11 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         emit Reported(profit, loss, currentManagementFee, currentPerformanceFee);
     }
 
-    function rebalance(BaseStrategy strategy) public nonReentrant onlyRole(KEEPER_ROLE) notPaused(strategy) returns(uint amount) {
+    function rebalance(BaseStrategy strategy) public nonReentrant onlyRole(KEEPER_ROLE) returns(uint amount) {
+        return _rebalance(strategy);
+    }
+
+    function _rebalance(BaseStrategy strategy) internal notPaused(strategy) returns(uint amount){
         StrategyBalance storage info = strategyBalanceMap[strategy];
 
         require(info.sharePercent != 0, "strategy not found");
