@@ -19,28 +19,35 @@ contract StackingMock {
         _deposits[to] += amount;
     }
 
-    function withdraw(uint amount) external returns(uint returnAmount){
-        uint dep = _deposits[msg.sender];
-        require(amount <= dep, "more that balance");
+    function withdraw(uint value) external returns(uint amount){
+        uint balance = _deposits[msg.sender];
+        require(balance >= value, "more that can");
 
-        _deposits[msg.sender] -= amount;
+        _deposits[msg.sender] -= value > balance ? balance : value;
 
-        returnAmount = amount * 110 / 100; // + 10%
+        if (isReturnedProfit) {
+            amount = value + calculateTenPercent(value);
+        } else {
+            amount = value - calculateTenPercent(value);
+        }
+        _mockToken.mint(msg.sender, amount);
+    }
 
-        _mockToken.mint(msg.sender, returnAmount);
+    function balanceAndResult(address user) public view returns(uint balance) {
+        balance = _deposits[user];
+        if (isReturnedProfit) {
+            balance += calculateTenPercent(balance);
+        } else {
+            balance -= calculateTenPercent(balance);
+        }
     }
 
     function setIsReturnedProfit(bool isProfit) external {
         isReturnedProfit = isProfit;
     }
 
-    function balanceAndResult(address user) public view returns(uint balance) {
-            balance = _deposits[user];
-        if (isReturnedProfit) {
-            balance += balance * 10 / 100; // + 10%
-        } else {
-            balance -= balance * 10 / 100; // + 10%
-        }
+    function calculateTenPercent(uint value) internal pure returns(uint) {
+        return value * 10 / 100;// 10%
     }
 
     function getBalance(address user) external view returns(uint) {

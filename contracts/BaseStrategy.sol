@@ -9,10 +9,11 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 interface IVault {
     function report(BaseStrategy strategy) external;
     function rebalance(BaseStrategy strategy) external returns(uint amount);
+    function strategyBalance(BaseStrategy strategy) external view returns(uint);
 }
 
 abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
-    address immutable _vault; // default manager
+    address immutable _vault; // default manager/keeper
     ERC20 immutable _asset;
 
     uint _lastTotalAssets;
@@ -57,7 +58,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
     }
 
     function pull(uint256 _amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns(uint256 value) {
-        uint available = _harvestAndReport();
+        uint available = IVault(_vault).strategyBalance(this);
         require(_amount <= available, "insufficient assets");
 
         _lastTotalAssets -= _amount;
@@ -83,9 +84,9 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
     }
 
     function pause() public onlyRole(DEFAULT_ADMIN_ROLE)  {
-        uint newTotalAssets = _harvestAndReport();
         _isPaused = true;
-        _pull(newTotalAssets);
+        uint assetAmount = IVault(_vault).strategyBalance(this);
+        _pull(assetAmount);
 
         emit StrategyPaused(block.timestamp);
     }

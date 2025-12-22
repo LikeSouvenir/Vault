@@ -14,19 +14,20 @@ import {console} from "forge-std/Test.sol";
 contract StackingStrategyMock is BaseStrategy {
     StackingMock stackingMock;
 
-    constructor( Erc20Mock assetToken_, address vault_ ) BaseStrategy(address(assetToken_), "StackingStrategyMock", vault_) {
-        stackingMock = new StackingMock(assetToken_);
+    constructor( StackingMock stackingMock_, Erc20Mock assetToken_, address vault_ ) BaseStrategy(address(assetToken_), "StackingStrategyMock", vault_) {
+        stackingMock = stackingMock_;
     }
 
-    function _pull(uint256 _amount ) internal virtual override returns (uint256) {
+    function _pull(uint256 _amount ) internal override returns (uint256) {
         return stackingMock.withdraw(_amount);
     }
 
-    function _push(uint256 _amount) internal virtual override {
-        stackingMock.deposite(msg.sender, _amount);
+    function _push(uint256 _amount) internal override {
+        _asset.approve(address(stackingMock), _amount);
+        stackingMock.deposite(address(this), _amount);
     }
 
-    function _harvestAndReport() internal virtual override returns (uint256 _totalAssets) {
-        return stackingMock.getBalance(msg.sender);
+    function _harvestAndReport() internal view override returns (uint256 _totalAssets) {
+        return stackingMock.balanceAndResult(address(this));
     }
 }
