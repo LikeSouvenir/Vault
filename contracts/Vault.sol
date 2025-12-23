@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
-import "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {BaseStrategy} from "./BaseStrategy.sol";
 /**
@@ -16,6 +18,8 @@ import {BaseStrategy} from "./BaseStrategy.sol";
  */
 
 contract Vault is ERC4626, AccessControl, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     uint internal constant BPS = 10_000;
     uint internal constant MAXIMUM_STRATEGIES = 20;
     uint16 internal constant DEFAULT_PERFORMANCE_FEE = 100;
@@ -34,13 +38,13 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
 
     bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
-    struct StrategyBalance {
+    struct StrategyInfo {
         uint balance;
         uint96 lastTakeTime;
         uint16 sharePercent;
         uint16 performanceFee;// The percent in basis points of profit that is charged as a fee.
     }
-    mapping (BaseStrategy => StrategyBalance) strategyBalanceMap;
+    mapping (BaseStrategy => StrategyInfo) strategyInfoMap;
 
 //
     constructor(IERC20 assetToken_, string memory nameShare_, string memory sybolShare_, address manager_, address feeRecipient_) 
@@ -74,8 +78,12 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     }
 
     modifier notPaused(BaseStrategy strategy) {
-        require(strategy.isPaused() == false, "is paused");
+        _notPaused(strategy);
         _;
+    }
+
+    function _notPaused(BaseStrategy strategy) internal view{
+        require(!strategy.isPaused(), "is paused");
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -91,10 +99,10 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
 
 //
     function add(BaseStrategy newStrategy, uint16 sharePercent) external onlyRole(DEFAULT_ADMIN_ROLE) checkAsset(newStrategy) checkVault(newStrategy){
-        require (ERC20(asset()).allowance(address(newStrategy), address(this)) == type(uint256).max, "must allowance type(uint256).max");
+        require (IERC20(asset()).allowance(address(newStrategy), address(this)) == type(uint256).max, "must allowance type(uint256).max");
         require (address(withdrawQueue[MAXIMUM_STRATEGIES - 1]) == address(0), "limited of strategy");
 
-        StrategyBalance storage info = strategyBalanceMap[newStrategy];
+        StrategyInfo storage info = strategyInfoMap[newStrategy];
 
         require (info.sharePercent == 0, "strategy exist");
 
@@ -116,12 +124,13 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         onlyRole(DEFAULT_ADMIN_ROLE) 
         checkAsset(newStrategy)
         checkVault(newStrategy)
+        nonReentrant
     {
-        require (strategyBalanceMap[newStrategy].sharePercent == 0, "strategy alredy exist");
+        require (strategyInfoMap[newStrategy].sharePercent == 0, "strategy alredy exist");
 
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
-            if (withdrawQueue[i] == oldStrategy) {
-                StrategyBalance memory info = strategyBalanceMap[oldStrategy];
+            if (address(withdrawQueue[i]) == address(oldStrategy)) {
+                StrategyInfo memory info = strategyInfoMap[oldStrategy];
         
                 withdrawQueue[i] = newStrategy;
 
@@ -130,28 +139,36 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
 
                 newStrategy.push(balance);
                 
-                strategyBalanceMap[newStrategy] = StrategyBalance(
-                    balance,
-                    uint96(block.timestamp),
-                    info.sharePercent,
-                    info.performanceFee
-                );
-
-                delete strategyBalanceMap[oldStrategy];
+                strategyInfoMap[newStrategy] = StrategyInfo({ 
+                    balance: balance, 
+                    lastTakeTime: uint96(block.timestamp), 
+                    sharePercent: info.sharePercent, 
+                    performanceFee: info.performanceFee 
+                });
                 break;
             }
         }
+
+        delete strategyInfoMap[oldStrategy];
     
         emit StrategyMigrated(address(oldStrategy), address(newStrategy));
+    }
+
+    function withdraw(uint256 assets, address receiver, address owner) public override nonReentrant returns (uint256) {
+        return super.withdraw(assets, receiver, owner);
+    }
+
+    function redeem(uint256 shares, address receiver, address owner) public override nonReentrant returns (uint256) {
+        return super.redeem(shares, receiver, owner);
     }
 
     function _withdraw( address caller, address receiver, address owner, uint256 assets, uint256 shares ) internal override {
         uint thisBalance = IERC20(asset()).balanceOf(address(this));
         if (thisBalance < assets){
-            uint needed = assets - thisBalance;
-
             for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
+                uint needed = assets - thisBalance;
                 BaseStrategy currentStrategy = withdrawQueue[i];
+
                 if (address(currentStrategy) == address(0)) {
                     break;
                 }
@@ -160,25 +177,21 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
                     continue;
                 }
 
-                StrategyBalance storage info = strategyBalanceMap[currentStrategy];
+                StrategyInfo storage info = strategyInfoMap[currentStrategy];
                 if (info.balance == 0) {
                     continue;
                 }
 
                 uint take = needed < info.balance ? needed : info.balance;
             
-                uint result = currentStrategy.pull(take);
                 info.balance -= take;
+                uint result = currentStrategy.pull(take);
 
                 if (needed <= result) {
-                    needed = 0;
                     break;
                 }
-
                 needed -= result;
             }
-            
-            require(needed == 0, "not enaugth");
         }
 
         super._withdraw(caller, receiver, owner, assets, shares);
@@ -214,31 +227,31 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         }
     }
 
-    function report(BaseStrategy strategy) public nonReentrant onlyRole(KEEPER_ROLE) {
+    function report(BaseStrategy strategy) external nonReentrant onlyRole(KEEPER_ROLE) {
         _report(strategy);
     }
     
     function _report(BaseStrategy strategy) internal notPaused(strategy) {
-        StrategyBalance storage info = strategyBalanceMap[strategy];
+        StrategyInfo storage info = strategyInfoMap[strategy];
 
         (uint256 profit, uint256 loss) = strategy.report();
-        uint currentPerformanceFee;
-        uint currentManagementFee;
+        uint currentPerformanceFee = 0;
+        uint currentManagementFee = 0;
 
         if (profit > 0) {
-            currentPerformanceFee = (profit * info.performanceFee) / BPS;
+            currentPerformanceFee = (profit * info.performanceFee) / BPS; 
             uint currentFee = currentPerformanceFee;
 
             if (_managementFee != 0) {
-                uint monthsPassed = (block.timestamp - info.lastTakeTime) / ONE_MONTH;
+                uint time = block.timestamp - info.lastTakeTime;
+                info.lastTakeTime = uint96(block.timestamp);
 
-                if (monthsPassed > 0) {
-                    // Комиссия за каждый прошедший месяц
-                    currentManagementFee = (info.balance * _managementFee) / BPS / TWELVE_MONTHS;
+                currentManagementFee = 
+                    (info.balance * _managementFee
+                    * time) 
+                    / (BPS * SECONDS_PER_YEAR);
 
-                    info.lastTakeTime = uint96(block.timestamp);
-                    currentFee += currentManagementFee * monthsPassed;
-                }
+                currentFee += currentManagementFee;
             }
 
             if (currentFee > 0) {
@@ -252,19 +265,19 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         emit Reported(profit, loss, currentManagementFee, currentPerformanceFee);
     }
 
-    function rebalance(BaseStrategy strategy) public nonReentrant onlyRole(KEEPER_ROLE) returns(uint amount) {
-        return _rebalance(strategy);
+    function rebalance(BaseStrategy strategy) external nonReentrant onlyRole(KEEPER_ROLE) {
+        _rebalance(strategy);
     }
 
-    function _rebalance(BaseStrategy strategy) internal notPaused(strategy) returns(uint amount){
-        StrategyBalance storage info = strategyBalanceMap[strategy];
+    function _rebalance(BaseStrategy strategy) internal notPaused(strategy) {
+        StrategyInfo storage info = strategyInfoMap[strategy];
 
         require(info.sharePercent != 0, "strategy not found");
 
-        amount = totalAssets() * info.sharePercent / BPS;
+        uint amount = totalAssets() * info.sharePercent / BPS;
         
         if (info.balance < amount) {
-            ERC20(asset()).approve(address(strategy), amount - info.balance );
+            IERC20(asset()).forceApprove(address(strategy), amount - info.balance );
             strategy.push(amount - info.balance);
 
         } else if (info.balance > amount)  {
@@ -273,19 +286,14 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         
         info.balance = amount;
 
-        emit UpdateStrategyBalance(strategy, amount);
+        emit UpdateStrategyInfo(strategy, amount);
     }
 
     function remove(BaseStrategy strategy) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant  returns(uint amountAssets){
-        require (strategyBalanceMap[strategy].sharePercent != 0, "strategy not exist");
-        bool find;
+        require (strategyInfoMap[strategy].sharePercent != 0, "strategy not exist");
+        bool find = false;
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
-            if (withdrawQueue[i] == strategy) {
-                _report(strategy);
-
-                amountAssets = strategy.pull(strategyBalanceMap[strategy].balance);
-                
-                delete strategyBalanceMap[strategy];
+            if (address(withdrawQueue[i]) == address(strategy)) {
                 find = true;
             }
             if (find && i != MAXIMUM_STRATEGIES - 1) {
@@ -294,6 +302,10 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         }
 
         require(find, "strategy not removed");
+        
+        _report(strategy);
+        amountAssets = strategy.pull(strategyInfoMap[strategy].balance);
+        delete strategyInfoMap[strategy];
 
         emit StrategyRemoved(address(strategy), amountAssets);
     }
@@ -307,7 +319,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
             BaseStrategy newPos = queue[i];
 
             require (address(newPos) != address(0), "Cannot use to remove");
-            require (strategyBalanceMap[newPos].sharePercent != 0, "Cannot use to change strategies");
+            require (strategyInfoMap[newPos].sharePercent != 0, "Cannot use to change strategies");
         }
 
         withdrawQueue = queue;
@@ -316,8 +328,8 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     }
 
     function setSharePercent(BaseStrategy strategy, uint16 sharePercent) public onlyRole(DEFAULT_ADMIN_ROLE) checkBorderBPS(sharePercent) {
-        uint16 currentPercent = strategyBalanceMap[strategy].sharePercent;
-        uint totalSharePercent;
+        uint16 currentPercent = strategyInfoMap[strategy].sharePercent;
+        uint totalSharePercent = 0;
         
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
             BaseStrategy currentStrategy = withdrawQueue[i];
@@ -326,18 +338,18 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
                 break;
             }
 
-            totalSharePercent += strategyBalanceMap[currentStrategy].sharePercent;
+            totalSharePercent += strategyInfoMap[currentStrategy].sharePercent;
         }
 
         require(totalSharePercent - currentPercent + sharePercent <= MAX_PERSENT, "total share <= 100%");
 
-        strategyBalanceMap[strategy].sharePercent = sharePercent;
+        strategyInfoMap[strategy].sharePercent = sharePercent;
 
         emit UpdateStrategySharePercent(address(strategy), sharePercent);
     }
 
     function setPerformanceFee(BaseStrategy strategy, uint16 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) checkBorderBPS(newFee) {
-        strategyBalanceMap[strategy].performanceFee = newFee;
+        strategyInfoMap[strategy].performanceFee = newFee;
 
         emit UpdatePerformanceFee(address(strategy), newFee);
     }
@@ -355,21 +367,9 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
         emit UpdateManagementRecipient(recipient);
     }
 
-    function emergencyWithdraw(BaseStrategy strategy) public onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns(uint _amount) {
-        if (strategy.isPaused()) {
-            SafeERC20.safeTransferFrom(
-                ERC20(asset()), 
-                address(strategy), 
-                address(this), 
-                ERC20(asset()).balanceOf(address(strategy))
-            );
-        } else {
-            _amount = strategy.pull(strategyBalanceMap[strategy].balance);
-            strategyBalanceMap[strategy].balance = 0;
-            strategy.pause();
-        }
-
-        emit EmergencyWithdraw(block.timestamp, _amount);
+    function emergencyWithdraw(BaseStrategy strategy) public onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns(uint amount) {
+        amount = strategy.emergencyWithdraw();
+        strategyInfoMap[strategy].balance = 0;
     }
 
     function pause(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) notPaused(strategy) {
@@ -404,7 +404,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     }
     
     function strategyPerformanceFee(BaseStrategy strategy) external view returns(uint16) {
-        return strategyBalanceMap[strategy].performanceFee;
+        return strategyInfoMap[strategy].performanceFee;
     }
 
     function managementFee() external view returns(uint16) {
@@ -428,18 +428,18 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
                 continue;
             }
 
-            vaultBalance += strategyBalanceMap[withdrawQueue[i]].balance;
+            vaultBalance += strategyInfoMap[withdrawQueue[i]].balance;
         }
 
         return vaultBalance;
     }
 
     function strategyBalance(BaseStrategy strategy) public view returns(uint) {
-        return strategyBalanceMap[strategy].balance;
+        return strategyInfoMap[strategy].balance;
     }
 
     function strategySharePercent(BaseStrategy strategy) external view returns(uint16) {
-        return strategyBalanceMap[strategy].sharePercent;
+        return strategyInfoMap[strategy].sharePercent;
     }
 
     event UpdateManagementRecipient(address indexed recipient);
@@ -452,7 +452,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
 
     event StrategyAdded (address indexed strategy);
 
-    event UpdateStrategyBalance(BaseStrategy indexed strategy, uint newBalance);
+    event UpdateStrategyInfo(BaseStrategy indexed strategy, uint newBalance);
     
     event UpdateWithdrawalQueue(BaseStrategy[MAXIMUM_STRATEGIES]);
 
@@ -460,8 +460,6 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
 
     event StrategyRemoved (address indexed strategy, uint totalAssets);
     
-    event EmergencyWithdraw(uint timestamp, uint amount);
-
     event Reported(
         uint256 profit,
         uint256 loss,

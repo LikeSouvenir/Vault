@@ -9,6 +9,7 @@ import {StackingMock} from "./StackingMock.sol";
 interface IVault {
     function report(BaseStrategy strategy) external;
     function rebalance(BaseStrategy strategy) external returns(uint amount);
+    function strategyBalance(BaseStrategy strategy) external view returns(uint);
 }
 
 contract VaultMock is IVault {
@@ -17,8 +18,26 @@ contract VaultMock is IVault {
     uint256 loss;
     uint strategyTotalAsset;
 
+
+    struct StrategyInfo {
+        uint balance;
+        uint96 lastTakeTime;
+        uint16 sharePercent;
+        uint16 performanceFee;// The percent in basis points of profit that is charged as a fee.
+    }
+    mapping (BaseStrategy => uint) balances;
+
     constructor(Erc20Mock _assetToken) {
         assetToken = _assetToken;
+    }
+
+    function setStrategyBalance(BaseStrategy strategy, uint balance) external  {
+        balances[strategy] = balance;
+    }
+
+
+    function strategyBalance(BaseStrategy strategy) external view returns(uint) {
+        return balances[strategy];
     }
 
     function report(BaseStrategy strategy) external {

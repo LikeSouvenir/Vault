@@ -6,11 +6,6 @@ import {BaseStrategy} from "../../contracts/BaseStrategy.sol";
 import {StackingMock} from "./StackingMock.sol";
 import {Erc20Mock} from "./Erc20Mock.sol";
 
-import {Test} from "forge-std/Test.sol"; 
-import {stdStorage, StdStorage} from "forge-std/Test.sol"; 
-import {stdError} from "forge-std/Test.sol";
-import {console} from "forge-std/Test.sol";
-
 contract StackingStrategyMock is BaseStrategy {
     StackingMock stackingMock;
 
@@ -23,7 +18,7 @@ contract StackingStrategyMock is BaseStrategy {
     }
 
     function _push(uint256 _amount) internal override {
-        _asset.approve(address(stackingMock), _amount);
+        _ASSET.approve(address(stackingMock), _amount);
         stackingMock.deposite(address(this), _amount);
     }
 
