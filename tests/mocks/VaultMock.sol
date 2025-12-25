@@ -4,11 +4,10 @@ pragma solidity ^0.8.0;
 import {BaseStrategy} from "../../contracts/BaseStrategy.sol";
 
 import {Erc20Mock} from "./Erc20Mock.sol";
-import {StackingMock} from "./StackingMock.sol";
 
 interface IVault {
     function report(BaseStrategy strategy) external;
-    function rebalance(BaseStrategy strategy) external returns(uint amount);
+    function rebalance(BaseStrategy strategy) external;
     function strategyBalance(BaseStrategy strategy) external view returns(uint);
 }
 
@@ -17,6 +16,7 @@ contract VaultMock is IVault {
     uint256 profit; 
     uint256 loss;
     uint strategyTotalAsset;
+    bool isRebalanceWork;
 
 
     struct StrategyInfo {
@@ -29,6 +29,7 @@ contract VaultMock is IVault {
 
     constructor(Erc20Mock _assetToken) {
         assetToken = _assetToken;
+        isRebalanceWork = false;
     }
 
     function setStrategyBalance(BaseStrategy strategy, uint balance) external  {
@@ -42,26 +43,33 @@ contract VaultMock is IVault {
 
     function report(BaseStrategy strategy) external {
         strategyTotalAsset = strategy.lastTotalAssets();
+
+        uint balance = assetToken.balanceOf(address(strategy));
+        if (strategyTotalAsset > balance) {
+            assetToken.mint(address(strategy), strategyTotalAsset - balance);
+        } else {
+            assetToken.burn(address(strategy), balance - strategyTotalAsset);
+        }
         (profit, loss) = strategy.report();
         
+    }
+
+    function rebalance(BaseStrategy strategy) external {
+        if (!isRebalanceWork) {
+            return;
+        }
         if (profit > 0) {
             strategyTotalAsset += profit;
-            assetToken.mint(address(strategy), profit);
+
+            assetToken.mint(address(this), profit);
+            
+            assetToken.approve(address(strategy), profit);
+            strategy.push(profit);
 
         } else if (strategyTotalAsset > loss) {
             strategyTotalAsset -= loss;
-            assetToken.burn(address(strategy), loss);
-
-        } else revert("spend all");
-    }
-
-    function rebalance(BaseStrategy strategy) external returns(uint amount) {
-        if (profit > 0) {
-            assetToken.mint(address(strategy), profit);
-        } else {
-            assetToken.burn(address(strategy), profit);
+            
+            strategy.pull(loss);
         }
-
-        return strategyTotalAsset;
     }
 }

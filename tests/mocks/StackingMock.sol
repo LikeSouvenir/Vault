@@ -4,7 +4,12 @@ pragma solidity ^0.8.0;
 import {Erc20Mock} from "./Erc20Mock.sol";
 
 contract StackingMock {
-    mapping(address => uint) _deposits;
+    struct UserInfo {
+        uint balance;
+        uint profit;
+        uint loss;
+    }
+    mapping(address => UserInfo) _deposits;
     Erc20Mock _mockToken;
     bool isReturnedProfit;
 
@@ -14,31 +19,37 @@ contract StackingMock {
     }
 
     function deposite(address to, uint256 amount) external {
-        _mockToken.transferFrom(msg.sender, address(this), amount);
-        _deposits[to] += amount;
+        bool check = _mockToken.transferFrom(msg.sender, address(this), amount);
+        require(check, "bad transfer");
+        _deposits[to].balance += amount;
+    }
+
+    function updateInvest(address to) external {
+        uint balance = _deposits[to].balance;
+        if (isReturnedProfit) {
+            _deposits[to].profit += calculateTenPercent(balance);
+        } else {
+            _deposits[to].loss += calculateTenPercent(balance);
+        }
     }
 
     function withdraw(uint value) external returns(uint amount){
-        uint balance = _deposits[msg.sender];
+        UserInfo storage info = _deposits[msg.sender];
+        uint balance = info.balance + info.profit - info.loss;
         require(balance >= value, "more that can");
 
-        _deposits[msg.sender] -= value > balance ? balance : value;
+        info.balance = balance - value;
+        info.profit = 0;
+        info.loss = 0;
 
-        if (isReturnedProfit) {
-            amount = value + calculateTenPercent(value);
-        } else {
-            amount = value - calculateTenPercent(value);
-        }
-        _mockToken.mint(msg.sender, amount);
+        _mockToken.mint(msg.sender, value);
+
+        return value;
     }
 
     function balanceAndResult(address user) public view returns(uint balance) {
-        balance = _deposits[user];
-        if (isReturnedProfit) {
-            balance += calculateTenPercent(balance);
-        } else {
-            balance -= calculateTenPercent(balance);
-        }
+        UserInfo storage info = _deposits[user];
+        balance = info.balance + info.profit - info.loss;
     }
 
     function setIsReturnedProfit(bool isProfit) external {
@@ -50,7 +61,7 @@ contract StackingMock {
     }
 
     function getBalance(address user) external view returns(uint) {
-        return _deposits[user];
+        return _deposits[user].balance;
     }
 
     function calculateProfit(uint profit) public pure returns(uint) {

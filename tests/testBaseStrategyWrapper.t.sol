@@ -10,12 +10,14 @@ import {StackingMock} from "./mocks/StackingMock.sol";
 import {VaultMock} from "./mocks/VaultMock.sol";
 
 import {Test} from "forge-std/Test.sol"; 
+import {console} from "forge-std/Test.sol"; 
 
 contract BaseStrategyWrapperTest is Test{
     string constant NAME_ASSET_TOKEN = "vaultAsset";
     string constant SYMBOL_ASSET_TOKEN = "VA";
     string constant NAME_BASE_STRATEGY_WRAPPER = "StackingStrategyWrapper";
     uint constant DEFAULT_BALANCE = 10_000e18;
+    uint constant DEPOSIT_VALUE = 10_000;
 
     Erc20Mock erc20Mock;
     StackingMock stackingMock;
@@ -40,7 +42,7 @@ contract BaseStrategyWrapperTest is Test{
 
     }
 
-    function strate_push10000FromVaultgyInfo(uint depositValue) internal {
+    function _strategyPushAmountFromVault(uint depositValue) internal {
         vaultMock.setStrategyBalance(strategyWrapper, depositValue);
 
         vm.startPrank(address(vaultMock));
@@ -50,8 +52,7 @@ contract BaseStrategyWrapperTest is Test{
     }
 
     function test_BadSender_reportAndInvest() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
         
         vm.startPrank(user1);
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, strategyWrapper.KEEPER_ROLE()));
@@ -59,15 +60,15 @@ contract BaseStrategyWrapperTest is Test{
     }
 
     function test_Keeper_reportAndInvest() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
 
         vm.startPrank(address(vaultMock));
         strategyWrapper.grantRole(strategyWrapper.KEEPER_ROLE(), user1);
         vm.stopPrank();
 
         uint totalAsset = strategyWrapper.lastTotalAssets();
-        uint256 amount = stackingMock.calculateProfit(depositValue);
+        uint256 amount = stackingMock.calculateProfit(DEPOSIT_VALUE);
 
         vm.startPrank(user1);
         strategyWrapper.reportAndInvest();
@@ -78,25 +79,25 @@ contract BaseStrategyWrapperTest is Test{
     }
 
     function test_reportAndInvest() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
         
         assertTrue(strategyWrapper.hasRole(strategyWrapper.DEFAULT_ADMIN_ROLE(), address(vaultMock)));
 
-        uint totalAsset = strategyWrapper.lastTotalAssets();
-        uint256 amount = stackingMock.calculateProfit(depositValue);
+        uint totalAssetBefore = strategyWrapper.lastTotalAssets();
+        uint256 amount = stackingMock.calculateProfit(DEPOSIT_VALUE);
 
         vm.startPrank(address(vaultMock));
         strategyWrapper.reportAndInvest();
 
         uint totalAssetAfter = strategyWrapper.lastTotalAssets();
 
-        vm.assertEq(totalAsset + amount, totalAssetAfter);
+        vm.assertEq(totalAssetBefore + amount, totalAssetAfter);
     }
 
     function test_report() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
 
         // first profit > 0
         vm.startPrank(address(vaultMock));
@@ -104,85 +105,83 @@ contract BaseStrategyWrapperTest is Test{
 
         vm.assertEq(loss, 0);
 
-        uint256 amount = stackingMock.calculateProfit(depositValue);
+        uint256 amount = stackingMock.calculateProfit(DEPOSIT_VALUE);
         uint lastTotalAsset = strategyWrapper.lastTotalAssets();
 
         vm.assertEq(profit, amount);
-        vm.assertEq(depositValue + profit, lastTotalAsset);
+        vm.assertEq(DEPOSIT_VALUE + profit, lastTotalAsset);
 
         // second profit > 0
-        erc20Mock.approve(address(strategyWrapper), depositValue);
-        strategyWrapper.push(depositValue);
+        erc20Mock.approve(address(strategyWrapper), DEPOSIT_VALUE);
+        strategyWrapper.push(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
 
         (uint256 profitTwo,) = strategyWrapper.report();
         uint lastTotalAssetTwo = strategyWrapper.lastTotalAssets();
-        uint expectedResult = depositValue * 2 + profitTwo + profit;
+        uint expectedResult = DEPOSIT_VALUE * 2 + profitTwo + profit;
 
-        vm.assertEq(profitTwo, profit);
+        vm.assertEq(profitTwo, profit * 2);
         vm.assertEq(expectedResult, lastTotalAssetTwo);
 
         // thrid loss > 0
-        erc20Mock.approve(address(strategyWrapper), depositValue);
-        strategyWrapper.push(depositValue);
+        stackingMock.setIsReturnedProfit(false);  
 
-        stackingMock.setIsReturnedProfit(false);
+        erc20Mock.approve(address(strategyWrapper), DEPOSIT_VALUE);
+        strategyWrapper.push(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
 
         (, uint256 lossThree) = strategyWrapper.report();
         uint lastTotalAssetThree = strategyWrapper.lastTotalAssets();
 
-        expectedResult = depositValue * 3 + profitTwo + profit - lossThree;
+        expectedResult = DEPOSIT_VALUE * 3 + profitTwo + profit - lossThree;
         
         vm.assertEq(expectedResult, lastTotalAssetThree);
     }
 
     function test_NotVault_push() external {
-        uint depositValue = 10_000;
 
         vm.startPrank(user3);
-        erc20Mock.approve(address(strategyWrapper), depositValue);
+        erc20Mock.approve(address(strategyWrapper), DEPOSIT_VALUE);
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user3, address(0)));
 
-        strategyWrapper.push(depositValue);
+        strategyWrapper.push(DEPOSIT_VALUE);
     }
 
     function test_push() external {
-        uint depositValue = 10_000;
-
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
 
         uint check = strategyWrapper.lastTotalAssets();
-        vm.assertEq(check, depositValue);
+        vm.assertEq(check, DEPOSIT_VALUE);
 
         uint balanceVaultAfter = erc20Mock.balanceOf(address(vaultMock));
-        vm.assertEq(DEFAULT_BALANCE - depositValue, balanceVaultAfter);
+        vm.assertEq(DEFAULT_BALANCE - DEPOSIT_VALUE, balanceVaultAfter);
 
         uint balanceStacking = erc20Mock.balanceOf(address(stackingMock));
-        vm.assertEq(depositValue, balanceStacking);
+        vm.assertEq(DEPOSIT_VALUE, balanceStacking);
     }
 
     function test_NotVault_pull() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
 
         vm.prank(user3);
         vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user3, address(0)));
 
-        strategyWrapper.pull(depositValue);
+        strategyWrapper.pull(DEPOSIT_VALUE);
     }
 
     function test_pull() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
 
         uint balance = stackingMock.getBalance(address(strategyWrapper));
+        vm.assertEq(DEPOSIT_VALUE, balance); 
+ 
+        stackingMock.updateInvest(address(strategyWrapper));
         uint balanceAndResullt = stackingMock.balanceAndResult(address(strategyWrapper));
 
-        vm.assertEq(depositValue , balance);  
-
         vm.prank(address(vaultMock));
-        strategyWrapper.pull(depositValue);
+        strategyWrapper.pull(DEPOSIT_VALUE);
 
-        uint calculatedProfit = stackingMock.calculateProfit(depositValue);
+        uint calculatedProfit = stackingMock.calculateProfit(DEPOSIT_VALUE);
 
         vm.assertEq(balanceAndResullt - balance , calculatedProfit);  
     }
@@ -278,34 +277,31 @@ contract BaseStrategyWrapperTest is Test{
     event StrategyPaused(uint indexed timestamp);
 
     function test_eventPull() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
 
         vm.startPrank(address(vaultMock));
         (uint256 profit, uint loss) = strategyWrapper.report();
         
         vm.expectEmit(true, false, false, false);
-        emit Pull(depositValue + profit - loss);
+        emit Pull(DEPOSIT_VALUE + profit - loss);
 
-        strategyWrapper.pull(depositValue);
+        strategyWrapper.pull(DEPOSIT_VALUE);
     }
 
     function test_eventPush() external {
-        uint depositValue = 10_000;
-
         vm.startPrank(address(vaultMock));
-        erc20Mock.approve(address(strategyWrapper), depositValue);
+        erc20Mock.approve(address(strategyWrapper), DEPOSIT_VALUE);
         
         vm.expectEmit(true, false, false, false);
-        emit Push(depositValue);
-        strategyWrapper.push(depositValue);
+        emit Push(DEPOSIT_VALUE);
+        strategyWrapper.push(DEPOSIT_VALUE);
     }
 
     function test_eventReport() external {
-        uint depositValue = 10_000;
-        strate_push10000FromVaultgyInfo(depositValue);
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
 
-        uint expercterProfit = stackingMock.calculateProfit(depositValue);
+        uint expercterProfit = stackingMock.calculateProfit(DEPOSIT_VALUE);
         uint expercterLoss = 0;
 
         vm.expectEmit(true, true, true, false);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.33;
+// pragma solidity 0.8.33;
+pragma solidity ^0.8.0;
 
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -59,19 +60,32 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     }
 
     modifier checkBorderBPS(uint16 num) {
+        _checkBorderBPS(num);
+        _;
+    }
+
+    function _checkBorderBPS(uint16 num) internal pure{
         require(num >= uint16(MIN_PERSENT), "min % is 0,01");
         require(num <= uint16(MAX_PERSENT), "max % is 100");
-        _;
     }
 
     modifier checkAsset(BaseStrategy strategy) {
-        require (strategy.asset() == address(asset()), "bad strategy asset in");
+        _checkAsset(strategy);
         _;
     }
 
+    function _checkAsset(BaseStrategy strategy) internal view {
+        require (strategy.asset() == address(asset()), "bad strategy asset in");
+    }
+
+    
     modifier checkVault(BaseStrategy strategy) {
-        require (strategy.vault() == address(this), "bad strategy vault in");
+        _checkVault(strategy);
         _;
+    }
+
+    function _checkVault(BaseStrategy strategy) internal view {
+        require (strategy.vault() == address(this), "bad strategy vault in");
     }
 
     modifier notPaused(BaseStrategy strategy) {
@@ -194,16 +208,21 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
     function report(BaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
         _report(strategy);
     }
-    
+
     function _report(BaseStrategy strategy) internal notPaused(strategy) {
         (uint256 profit, uint256 loss) = strategy.report();
         uint currentPerformanceFee = 0;
         uint currentManagementFee = 0;
         StrategyInfo storage info = strategyInfoMap[strategy];
-        
+
         if (loss > 0) {
-            info.balance -= loss;
+            if (info.balance < loss) {
+                info.balance = 0;
+            } else {
+                info.balance -= loss;
+            } 
         }
+
         if (profit > 0) {
             info.balance += profit;
 
@@ -214,9 +233,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
                 uint time = block.timestamp - info.lastTakeTime;
                 info.lastTakeTime = uint96(block.timestamp);
 
-                currentManagementFee = 
-                    (info.balance * _managementFee * time) 
-                    / (BPS * SECONDS_PER_YEAR);
+                currentManagementFee = (info.balance * _managementFee * time) / (BPS * SECONDS_PER_YEAR);
 
                 currentFee += currentManagementFee;
             }
@@ -274,7 +291,7 @@ contract Vault is ERC4626, AccessControl, ReentrancyGuard {
                 withdrawQueue[i] = withdrawQueue[i + 1];
             }
         }
-        withdrawQueue[MAXIMUM_STRATEGIES] = BaseStrategy(address(0));
+        withdrawQueue[MAXIMUM_STRATEGIES - 1] = BaseStrategy(address(0));
         require(find, "strategy not removed");
 
         delete strategyInfoMap[strategy];

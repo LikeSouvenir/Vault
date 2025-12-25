@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
-pragma solidity 0.8.33;
+// pragma solidity 0.8.33;
+pragma solidity ^0.8.0;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -97,9 +98,9 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         amount = ERC20(_asset).balanceOf(address(this));
 
         if (!_isPaused) {
-            _isPaused = true;
             uint assetAmount = _harvestAndReport();
             _pull(assetAmount - amount);
+            _isPaused = true;
         }
 
         amount = ERC20(_asset).balanceOf(address(this));
@@ -112,7 +113,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
 
     function pause() public onlyRole(DEFAULT_ADMIN_ROLE)  {
         _isPaused = true;
-        uint assetAmount = IVault(_vault).strategyBalance(this);
+        uint assetAmount = _harvestAndReport();
         _pull(assetAmount);
 
         emit StrategyPaused(block.timestamp);

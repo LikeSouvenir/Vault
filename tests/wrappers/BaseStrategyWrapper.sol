@@ -3,8 +3,8 @@ pragma solidity ^0.8.0;
 
 import {BaseStrategy} from "../../contracts/BaseStrategy.sol";
 
-import {Erc20Mock} from "../mocks/Erc20Mock.sol";
 import {StackingMock} from "../mocks/StackingMock.sol";
+import {Erc20Mock} from "../mocks/Erc20Mock.sol";
 
 contract BaseStrategyWrapper is BaseStrategy{
     StackingMock stackingMock;
@@ -18,7 +18,7 @@ contract BaseStrategyWrapper is BaseStrategy{
     }
 
     function _push(uint256 _amount) internal virtual override {
-        _ASSET.approve(address(stackingMock), _amount);
+        _asset.approve(address(stackingMock), _amount);
         stackingMock.deposite(address(this), _amount);
     }
 

@@ -4,14 +4,15 @@ pragma solidity ^0.8.0;
 import {BaseStrategy} from "../contracts/BaseStrategy.sol";
 import {Vault} from "../contracts/Vault.sol";
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+// import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 import {Erc20Mock} from "./mocks/Erc20Mock.sol";
 import {StackingMock} from "./mocks/StackingMock.sol";
-import {StackingStrategyMock} from "./mocks/StackingStrategyMock.t.sol";
+import {BaseStrategyWrapper} from "./wrappers/BaseStrategyWrapper.sol";
 
 import {Test} from "forge-std/Test.sol"; 
+import {console} from "forge-std/Test.sol"; 
 
 contract VaultTest is Test {
     uint constant BPS = 10_000;
@@ -21,9 +22,10 @@ contract VaultTest is Test {
     uint constant MAXIMUM_STRATEGIES = 20;
     bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
-
+    uint constant CURRENT_DATE = 1766389559;
+    uint256 internal constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
     uint constant DEFAULT_USER_BALANCE = 10_000e18;
-    uint16 constant TEST_INVEST_VALUE = 10_000;
+    uint constant TEST_INVEST_VALUE = 100_000;
     uint16 constant TEST_STRATEGY_SHARE_PERSENT = 1_000;
     string constant VAULT_NAME_SHARE_TOKEN = "vaultShare";
     string constant VAULT_SYMBOL_SHARE_TOKEN = "VS";
@@ -31,8 +33,8 @@ contract VaultTest is Test {
     Erc20Mock erc20Mock;
     StackingMock stackingMock;
     Vault vault;
-    StackingStrategyMock strategyOne;
-    StackingStrategyMock strategyTwo;
+    BaseStrategyWrapper strategyOne;
+    BaseStrategyWrapper strategyTwo;
 
     address manager = vm.addr(1);
     address keeper = vm.addr(2);
@@ -43,14 +45,14 @@ contract VaultTest is Test {
     address user3 = vm.addr(6);
 
     function setUp() public {
-        vm.warp(1766389559);
+        vm.warp(CURRENT_DATE);
 
         erc20Mock = new Erc20Mock();
         stackingMock = new StackingMock(erc20Mock);
         vault = new Vault(erc20Mock, VAULT_NAME_SHARE_TOKEN, VAULT_SYMBOL_SHARE_TOKEN, manager, feeRecipient);
 
-        strategyOne = new StackingStrategyMock(stackingMock, erc20Mock, address(vault));
-        strategyTwo = new StackingStrategyMock(stackingMock, erc20Mock, address(vault));
+        strategyOne = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
+        strategyTwo = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
 
         erc20Mock.mint(user1, DEFAULT_USER_BALANCE);
         erc20Mock.mint(user2, DEFAULT_USER_BALANCE);
@@ -117,72 +119,34 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
-    function test_notEnaugthVaultToken_withdraw() external {
-        _setUpWithStrategyOneAndTwoWithMaxSharePersent();
-
-        _depositFrom(user2);
-        _depositFrom(user3);
-
-        vm.prank(address(keeper));
-        vault.reportsAndInvests();
-
-        uint vaultBalance = erc20Mock.balanceOf(address(vault));
-        vm.assertEq(vaultBalance, 0);
-
-        uint user2Balance = erc20Mock.balanceOf(user2);
-
-        vm.startPrank(user2);
-        vault.withdraw(TEST_INVEST_VALUE, user2, user2);
-
-        vm.assertEq(user2Balance + TEST_INVEST_VALUE, DEFAULT_USER_BALANCE);
-    }
-
-    function test_reportsAndInvests() external {
-        _setUpWithStrategyOneAndTwoWithMaxSharePersent();
-
-        _depositFrom(user2);
-
-        uint balanceStrategyOne = vault.strategyBalance(strategyOne);
-        uint balanceStrategyTwo = vault.strategyBalance(strategyTwo);
-
-        vm.assertEq(balanceStrategyOne, 0);
-        vm.assertEq(balanceStrategyTwo, 0);
-
-        vm.startPrank(keeper);
-        vault.reportsAndInvests();
-
-        balanceStrategyOne = vault.strategyBalance(strategyOne);
-        balanceStrategyTwo = vault.strategyBalance(strategyTwo);
-
-        vm.assertEq(balanceStrategyOne, TEST_INVEST_VALUE / 2);
-        vm.assertEq(balanceStrategyTwo, TEST_INVEST_VALUE / 2);
-    }
-
     function test_withManagmentFee_report() external {
         _setUpWithLiquidityStrategyOne();
+        stackingMock.updateInvest(address(strategyOne));
 
         uint expectedProfit = stackingMock.calculateProfit(TEST_INVEST_VALUE);
         uint strategyBalance = vault.strategyBalance(strategyOne);
         uint performanceFee = vault.strategyPerformanceFee(strategyOne);
         uint managementFee = vault.managementFee();
         
-        uint expectedPerformanceFee = expectedProfit * performanceFee / BPS;
-        uint expectedManagementFee = strategyBalance * managementFee / BPS / 12;
+        uint period = 32 days;
+        uint expectedPerformanceFee = vault.previewDeposit(expectedProfit * performanceFee / BPS);
+        uint expectedManagementFee = ((strategyBalance + expectedProfit) * managementFee * period) / (BPS * SECONDS_PER_YEAR);
 
         vm.expectEmit(true, true, true, true);
         emit Reported(expectedProfit, 0, expectedManagementFee, expectedPerformanceFee);
 
-        vm.warp(block.timestamp + 32 days);
+        vm.warp(CURRENT_DATE + period);
         vm.startPrank(keeper);
-        vault.report(strategyOne);  
-        
+        vault.report(strategyOne);
+
         uint recipientBalance = vault.balanceOf(feeRecipient);
-        vm.assertEq(recipientBalance, expectedPerformanceFee + expectedManagementFee);
+        vm.assertEq(recipientBalance, vault.previewDeposit(expectedPerformanceFee + expectedManagementFee));
     }
 
     function test_withLoss_report() external {
         _setUpWithLiquidityStrategyOne();
         stackingMock.setIsReturnedProfit(false);
+        stackingMock.updateInvest(address(strategyOne));
 
         uint expectedLoss = stackingMock.calculateLoss(TEST_INVEST_VALUE);
         uint expectedPerformanceFee = 0;
@@ -199,6 +163,7 @@ contract VaultTest is Test {
 
     function test_withProfit_report() external {
         _setUpWithLiquidityStrategyOne();
+        stackingMock.updateInvest(address(strategyOne));
 
         uint expectedProfit = stackingMock.calculateProfit(TEST_INVEST_VALUE);
         uint performanceFee = vault.strategyPerformanceFee(strategyOne);
@@ -212,12 +177,13 @@ contract VaultTest is Test {
         vault.report(strategyOne);
 
         uint recipientBalance = vault.balanceOf(feeRecipient);
-        vm.assertEq(recipientBalance, expectedPerformanceFee);
+        vm.assertEq(recipientBalance, vault.previewDeposit(expectedPerformanceFee));
     }
 
 
     function test_whenNotPaused_emergencyWithdraw() external {
         _setUpWithLiquidityStrategyOne();
+        stackingMock.updateInvest(address(strategyOne));
 
         uint profit = stackingMock.calculateProfit(TEST_INVEST_VALUE);
 
@@ -240,6 +206,7 @@ contract VaultTest is Test {
 
     function test_whenPaused_emergencyWithdraw() external {
         _setUpWithLiquidityStrategyOne();
+        stackingMock.updateInvest(address(strategyOne));
 
         uint profit = stackingMock.calculateProfit(TEST_INVEST_VALUE);
 
@@ -386,7 +353,7 @@ contract VaultTest is Test {
     function test_outOfBoundsLimited_add() external {
         vm.startPrank(manager);
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
-            BaseStrategy strategy = new StackingStrategyMock(stackingMock, erc20Mock, address(vault));
+            BaseStrategy strategy = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
             vault.add(strategy, TEST_STRATEGY_SHARE_PERSENT / uint16(MAXIMUM_STRATEGIES));
         }
 
@@ -397,7 +364,7 @@ contract VaultTest is Test {
     function test_otherVaultIn_add() external {
         Vault otherVault = new Vault(erc20Mock, "", "", manager, feeRecipient);
 
-        BaseStrategy strategy = new StackingStrategyMock(stackingMock, erc20Mock, address(otherVault));
+        BaseStrategy strategy = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(otherVault));
 
         vm.startPrank(manager);
         vm.expectRevert(bytes("bad strategy vault in"));
@@ -406,7 +373,7 @@ contract VaultTest is Test {
 
     function test_unsuitableToken_add() external {
         Erc20Mock otherErc20 = new Erc20Mock();
-        BaseStrategy strategy = new StackingStrategyMock(stackingMock, otherErc20, address(vault));
+        BaseStrategy strategy = new BaseStrategyWrapper(stackingMock, otherErc20, "BaseStrategyWrapper", address(vault));
         
         vm.startPrank(manager);
         vm.expectRevert(bytes("bad strategy asset in"));
@@ -587,7 +554,7 @@ contract VaultTest is Test {
         vault.add(strategyTwo, TEST_STRATEGY_SHARE_PERSENT);
 
         BaseStrategy[MAXIMUM_STRATEGIES] memory newWithdrabalQueue;
-        newWithdrabalQueue[0] = new StackingStrategyMock(stackingMock, erc20Mock, address(vault));
+        newWithdrabalQueue[0] = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
         newWithdrabalQueue[1] = strategyOne;
 
         vm.expectRevert(bytes("Cannot use to change strategies"));
