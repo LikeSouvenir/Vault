@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
-pragma solidity ^0.8.0;
+pragma solidity 0.8.33;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -8,13 +8,13 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface IVault {
     function report(BaseStrategy strategy) external;
-    function rebalance(BaseStrategy strategy) external returns(uint amount);
+    function rebalance(BaseStrategy strategy) external;
     function strategyBalance(BaseStrategy strategy) external view returns(uint);
 }
 
 abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
-    address immutable _VAULT; // default manager/keeper
-    ERC20 immutable _ASSET;
+    address immutable _vault; // default manager/keeper
+    ERC20 immutable _asset;
 
     uint _lastTotalAssets;
     string _name;
@@ -27,44 +27,44 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         string memory name_,
         address vault_
     ) {
-        _ASSET = ERC20(assetToken_);
-        _VAULT = vault_;
+        _asset = ERC20(assetToken_);
+        _vault = vault_;
         _name = name_;
 
-        SafeERC20.forceApprove(_ASSET, _VAULT, type(uint256).max);
+        SafeERC20.forceApprove(_asset, _vault, type(uint256).max);
         
         _grantRole(DEFAULT_ADMIN_ROLE, vault_);
         _grantRole(KEEPER_ROLE, vault_);
     }
 
-    function _pull(uint256 _amount) internal virtual returns(uint256);
+    function _pull(uint256 amount) internal virtual returns(uint256);
 
-    function _push(uint256 _amount) internal virtual;
+    function _push(uint256 amount) internal virtual;
 
     function _harvestAndReport() internal virtual returns(uint256 _totalAssets);
 
     function reportAndInvest() external virtual onlyRole(KEEPER_ROLE) {
-        IVault(_VAULT).report(this);
-        IVault(_VAULT).rebalance(this);
+        IVault(_vault).report(this);
+        IVault(_vault).rebalance(this);
     }
 
-    function push(uint256 _amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
-        SafeERC20.safeTransferFrom(_ASSET, msg.sender, address(this), _amount);
+    function push(uint256 amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
+        SafeERC20.safeTransferFrom(_asset, msg.sender, address(this), amount);
 
-        _push(_amount);
-        _lastTotalAssets += _amount;
+        _push(amount);
+        _lastTotalAssets += amount;
         
-        emit Push(_amount);
+        emit Push(amount);
     }
 
-    function pull(uint256 _amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns(uint256 value) {
-        uint available = IVault(_VAULT).strategyBalance(this);
-        require(_amount <= available, "insufficient assets");
+    function pull(uint256 amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns(uint256 value) {
+        uint available = IVault(_vault).strategyBalance(this);
+        require(amount <= available, "insufficient assets");
 
-        _lastTotalAssets -= _amount;
-        value = _pull(_amount);
+        _lastTotalAssets -= amount;
+        value = _pull(amount);
 
-        SafeERC20.safeTransfer(_ASSET, msg.sender, value);
+        SafeERC20.safeTransfer(_asset, msg.sender, value);
 
         emit Pull(value);
     }
@@ -83,24 +83,36 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
         emit Report(block.timestamp, profit, loss);
     }
 
-    function emergencyWithdraw() external onlyRole(DEFAULT_ADMIN_ROLE) returns(uint _amount) {
+    function teakeAndClose() external onlyRole(DEFAULT_ADMIN_ROLE) returns(uint amount) {
+        amount = _withdraw();
+    }
+
+    function emergencyWithdraw() external onlyRole(DEFAULT_ADMIN_ROLE) returns(uint amount) {
+        _withdraw();
+
+        emit EmergencyWithdraw(block.timestamp, amount);
+    }
+
+    function _withdraw() internal returns(uint amount) {
+        amount = ERC20(_asset).balanceOf(address(this));
+
         if (!_isPaused) {
             _isPaused = true;
-            uint assetAmount = IVault(_VAULT).strategyBalance(this);
-            _pull(assetAmount);
+            uint assetAmount = _harvestAndReport();
+            _pull(assetAmount - amount);
         }
-        SafeERC20.safeTransfer(
-            ERC20(_ASSET), 
-            address(_VAULT), 
-            ERC20(_ASSET).balanceOf(address(this))
-        );
 
-        emit EmergencyWithdraw(block.timestamp, _amount);
+        amount = ERC20(_asset).balanceOf(address(this));
+        SafeERC20.safeTransfer(
+            ERC20(_asset), 
+            address(_vault), 
+            amount
+        );
     }
 
     function pause() public onlyRole(DEFAULT_ADMIN_ROLE)  {
         _isPaused = true;
-        uint assetAmount = IVault(_VAULT).strategyBalance(this);
+        uint assetAmount = IVault(_vault).strategyBalance(this);
         _pull(assetAmount);
 
         emit StrategyPaused(block.timestamp);
@@ -108,7 +120,7 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
 
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE)  {
         _isPaused = false;
-        _push(_ASSET.balanceOf(address(this)));
+        _push(_asset.balanceOf(address(this)));
 
         emit StrategyUnpaused(block.timestamp);
     }
@@ -118,11 +130,11 @@ abstract contract BaseStrategy is ReentrancyGuard, AccessControl {
     }
 
     function asset() external virtual view returns(address) {
-        return address(_ASSET);
+        return address(_asset);
     }
 
     function vault() external virtual view returns(address) {
-        return _VAULT;
+        return _vault;
     }
 
     function lastTotalAssets() external virtual view returns(uint) {
