@@ -1,0 +1,14 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+
+ignored_warnings_from = ["lib"]
+
+# remappings = [
+#     "@openzeppelin/=node_modules/@openzeppelin/",
+#     "forge-std/=node_modules/forge-std/",
+# ]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

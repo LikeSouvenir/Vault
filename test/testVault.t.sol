@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import {BaseStrategy} from "../contracts/BaseStrategy.sol";
-import {Vault} from "../contracts/Vault.sol";
+import {BaseStrategy} from "../src/BaseStrategy.sol";
+import {Vault} from "../src/Vault.sol";
 
-// import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 import {Erc20Mock} from "./mocks/Erc20Mock.sol";
@@ -51,8 +50,8 @@ contract VaultTest is Test {
         stackingMock = new StackingMock(erc20Mock);
         vault = new Vault(erc20Mock, VAULT_NAME_SHARE_TOKEN, VAULT_SYMBOL_SHARE_TOKEN, manager, feeRecipient);
 
-        strategyOne = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
-        strategyTwo = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
+        strategyOne = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
+        strategyTwo = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
 
         erc20Mock.mint(user1, DEFAULT_USER_BALANCE);
         erc20Mock.mint(user2, DEFAULT_USER_BALANCE);
@@ -353,7 +352,7 @@ contract VaultTest is Test {
     function test_outOfBoundsLimited_add() external {
         vm.startPrank(manager);
         for (uint i = 0; i < MAXIMUM_STRATEGIES; i++) {
-            BaseStrategy strategy = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
+            BaseStrategy strategy = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
             vault.add(strategy, TEST_STRATEGY_SHARE_PERSENT / uint16(MAXIMUM_STRATEGIES));
         }
 
@@ -364,7 +363,7 @@ contract VaultTest is Test {
     function test_otherVaultIn_add() external {
         Vault otherVault = new Vault(erc20Mock, "", "", manager, feeRecipient);
 
-        BaseStrategy strategy = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(otherVault));
+        BaseStrategy strategy = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(otherVault));
 
         vm.startPrank(manager);
         vm.expectRevert(bytes("bad strategy vault in"));
@@ -373,7 +372,7 @@ contract VaultTest is Test {
 
     function test_unsuitableToken_add() external {
         Erc20Mock otherErc20 = new Erc20Mock();
-        BaseStrategy strategy = new BaseStrategyWrapper(stackingMock, otherErc20, "BaseStrategyWrapper", address(vault));
+        BaseStrategy strategy = new BaseStrategyWrapper(address(stackingMock), otherErc20, "BaseStrategyWrapper", address(vault));
         
         vm.startPrank(manager);
         vm.expectRevert(bytes("bad strategy asset in"));
@@ -554,7 +553,7 @@ contract VaultTest is Test {
         vault.add(strategyTwo, TEST_STRATEGY_SHARE_PERSENT);
 
         BaseStrategy[MAXIMUM_STRATEGIES] memory newWithdrabalQueue;
-        newWithdrabalQueue[0] = new BaseStrategyWrapper(stackingMock, erc20Mock, "BaseStrategyWrapper", address(vault));
+        newWithdrabalQueue[0] = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
         newWithdrabalQueue[1] = strategyOne;
 
         vm.expectRevert(bytes("Cannot use to change strategies"));

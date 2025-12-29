@@ -33,7 +33,7 @@ contract BaseStrategyWrapperTest is Test{
         erc20Mock = new Erc20Mock();
         stackingMock = new StackingMock(erc20Mock);
         vaultMock = new VaultMock(erc20Mock);
-        strategyWrapper = new BaseStrategyWrapper(stackingMock, erc20Mock, NAME_BASE_STRATEGY_WRAPPER, address(vaultMock));
+        strategyWrapper = new BaseStrategyWrapper(address(stackingMock), erc20Mock, NAME_BASE_STRATEGY_WRAPPER, address(vaultMock));
 
         erc20Mock.mint(address(vaultMock), DEFAULT_BALANCE);
         erc20Mock.mint(user1, DEFAULT_BALANCE);

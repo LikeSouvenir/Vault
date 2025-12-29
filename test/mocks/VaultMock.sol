@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import {BaseStrategy} from "../../contracts/BaseStrategy.sol";
+import {BaseStrategy} from "../../src/BaseStrategy.sol";
 
 import {Erc20Mock} from "./Erc20Mock.sol";
 
