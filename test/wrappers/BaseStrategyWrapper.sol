@@ -8,20 +8,22 @@ import {BaseStrategy} from "../../src/BaseStrategy.sol";
 import {StackingMock} from "../mocks/StackingMock.sol";
 import {Erc20Mock} from "../mocks/Erc20Mock.sol";
 
-contract BaseStrategyWrapper is BaseStrategy{
-    StackingMock _investTo;
+contract BaseStrategyWrapper is BaseStrategy {
+    StackingMock private _investTo;
 
-    constructor(address investTo_, IERC20 assetToken_, string memory name_, address vault_ ) BaseStrategy(address(assetToken_), name_, vault_) {
+    constructor(address investTo_, IERC20 assetToken_, string memory name_, address vault_)
+        BaseStrategy(address(assetToken_), name_, vault_)
+    {
         _investTo = StackingMock(investTo_);
     }
 
-    function _pull(uint256 _amount ) internal virtual override returns (uint256) {
+    function _pull(uint256 _amount) internal virtual override returns (uint256) {
         return _investTo.withdraw(_amount);
     }
 
     function _push(uint256 _amount) internal virtual override {
         _asset.approve(address(_investTo), _amount);
-        _investTo.deposite(address(this), _amount);
+        _investTo.deposit(address(this), _amount);
     }
 
     function _harvestAndReport() internal virtual override returns (uint256 _totalAssets) {

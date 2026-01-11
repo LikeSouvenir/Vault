@@ -14,8 +14,16 @@ states/
 .env
 .env.local
 
+.idea/
+slither-env/
 vscode/
 node_modules/
 package-lock.json
 
 lib/
+broadcast/
+out/
+cache/
+
+temp.md
+test/SimpleFork.t.sol

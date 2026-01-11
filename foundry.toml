@@ -4,11 +4,13 @@ test = "test"
 out = "out"
 libs = ["lib"]
 
+fs_permissions = [{ access = "read-write", path = "./" }]
+
 ignored_warnings_from = ["lib"]
 
-# remappings = [
-#     "@openzeppelin/=node_modules/@openzeppelin/",
-#     "forge-std/=node_modules/forge-std/",
-# ]
-
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"
+sepolia = "${SEPOLIA_RPC_URL}"
+ 
+[etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}" }
