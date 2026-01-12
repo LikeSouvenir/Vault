@@ -3,14 +3,13 @@ pragma solidity ^0.8.0;
 
 import {Vault} from "../../src/Vault.sol";
 import {BaseStrategy} from "../../src/BaseStrategy.sol";
-import {CompoundUSDCStrategy} from "../../src/CompoundUSDCStrategy.sol";
+import {CompoundUsdcStrategy} from "../../src/CompoundUsdcStrategy.sol";
 import {AaveStrategy} from "../../src/AaveStrategy.sol";
 import {IComet} from "../../src/interfaces/IComet.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {Test, console, StdCheats} from "forge-std/Test.sol";
-import {StdUtils} from "forge-std/StdUtils.sol";
+import {Test, console} from "forge-std/Test.sol";
 
 uint16 constant DEFAULT_FEE = 100;
 uint16 constant MAX_PERCENT = 10_000;
@@ -35,7 +34,7 @@ address constant feeRecipient = 0x8A969F0C98ff14c5fa92d75aadE3f329141a3384;
 
 contract TestIntegVault is Test {
     Vault vault;
-    CompoundUSDCStrategy compoundV3;
+    CompoundUsdcStrategy compoundV3;
     AaveStrategy aave;
 
     address keeper = vm.addr(3);
@@ -45,7 +44,13 @@ contract TestIntegVault is Test {
     function setUp() public {
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
 
-        vault = new Vault(USDC, "vaultShare", "VS", manager, feeRecipient);
+        vault = new Vault(
+            USDC,
+            "vaultShare",
+            "VS",
+            manager,
+            feeRecipient
+        );
 
         require(address(COMET_USDC).code.length > 0, "Comet haven't code");
         require(IComet(COMET_USDC).balanceOf(address(this)) != type(uint256).max, "Comet unsupported WETH");
@@ -148,7 +153,7 @@ contract TestIntegVault is Test {
 
         skip(1 days);
         vm.startPrank(manager);
-        CompoundUSDCStrategy newCompoundV3 = new CompoundUSDCStrategy(
+        CompoundUsdcStrategy newCompoundV3 = new CompoundUSDCStrategy(
             COMET_USDC,
             address(USDC),
             "compoundUSDCStrategy",

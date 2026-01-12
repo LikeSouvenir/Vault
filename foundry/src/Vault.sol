@@ -12,9 +12,6 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {IBaseStrategy} from "./interfaces/IBaseStrategy.sol";
 import {IVault} from "./interfaces/IVault.sol";
-
-import "forge-std/Test.sol";
-
 /**
  *     ограничить ребалансировку и отчет бота
  *     отдельный emergency admin
@@ -101,8 +98,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @notice Modifier to check if percentage is within bounds
      * @param num Percentage value
      */
-    modifier checkBorderBPS(uint16 num) {
-        _checkBorderBPS(num);
+    modifier checkBorderBps(uint16 num) {
+        _checkBorderBps(num);
         _;
     }
 
@@ -110,7 +107,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @notice Internal function to check percentage bounds
      * @param num Percentage value
      */
-    function _checkBorderBPS(uint16 num) internal pure {
+    function _checkBorderBps(uint16 num) internal pure {
         require(num >= uint16(MIN_PERCENT), "min % is 0,01");
         require(num <= uint16(MAX_PERCENT), "max % is 100");
     }
@@ -483,14 +480,14 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     /**
      * @inheritdoc IVault
      * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
-     * @custom:modifier checkBorderBPS Percentage must be within valid bounds
+     * @custom:modifier checkBorderBps Percentage must be within valid bounds
      * @custom:requires Sum of all percentages must not exceed 100%
      * @custom:emits UpdateStrategySharePercent
      */
     function setSharePercent(IBaseStrategy strategy, uint16 sharePercent)
         public
         onlyRole(DEFAULT_ADMIN_ROLE)
-        checkBorderBPS(sharePercent)
+        checkBorderBps(sharePercent)
     {
         uint16 currentPercent = _strategyInfoMap[strategy].sharePercent;
         uint256 totalSharePercent = 0;
@@ -515,13 +512,13 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     /**
      * @inheritdoc IVault
      * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
-     * @custom:modifier checkBorderBPS Fee must be within valid bounds
+     * @custom:modifier checkBorderBps Fee must be within valid bounds
      * @custom:emits UpdatePerformanceFee
      */
     function setPerformanceFee(IBaseStrategy strategy, uint16 newFee)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
-        checkBorderBPS(newFee)
+        checkBorderBps(newFee)
     {
         _strategyInfoMap[strategy].performanceFee = newFee;
 
@@ -531,10 +528,10 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     /**
      * @inheritdoc IVault
      * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
-     * @custom:modifier checkBorderBPS Fee must be within valid bounds
+     * @custom:modifier checkBorderBps Fee must be within valid bounds
      * @custom:emits UpdateManagementFee
      */
-    function setManagementFee(uint16 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) checkBorderBPS(newFee) {
+    function setManagementFee(uint16 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) checkBorderBps(newFee) {
         _managementFee = newFee;
 
         emit UpdateManagementFee(newFee);

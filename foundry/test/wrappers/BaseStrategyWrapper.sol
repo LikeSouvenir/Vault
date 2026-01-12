@@ -2,11 +2,8 @@
 pragma solidity ^0.8.0;
 
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
-
 import {BaseStrategy} from "../../src/BaseStrategy.sol";
-
 import {StackingMock} from "../mocks/StackingMock.sol";
-import {Erc20Mock} from "../mocks/Erc20Mock.sol";
 
 contract BaseStrategyWrapper is BaseStrategy {
     StackingMock private _investTo;

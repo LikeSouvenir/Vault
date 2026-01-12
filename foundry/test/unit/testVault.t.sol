@@ -11,7 +11,6 @@ import {StackingMock} from "../mocks/StackingMock.sol";
 import {BaseStrategyWrapper} from "../wrappers/BaseStrategyWrapper.sol";
 
 import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/Test.sol";
 
 uint256 constant BPS = 10_000;
 uint16 constant DEFAULT_FEE = 100;
@@ -92,7 +91,7 @@ contract VaultTest is Test {
         vault.add(strategyOne, TEST_STRATEGY_SHARE_PERCENT);
     }
 
-    function _setUpWithStrategyOneAndTwoWithMaxSharePERCENT() internal {
+    function _setUpWithStrategyOneAndTwoWithMaxSharePercent() internal {
         vm.startPrank(manager);
         vault.add(strategyOne, MAX_PERCENT / 2);
         vault.add(strategyTwo, MAX_PERCENT / 2);

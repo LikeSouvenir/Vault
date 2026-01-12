@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
-
 import {BaseStrategy} from "./BaseStrategy.sol";
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract AaveStrategy is BaseStrategy {
+    using SafeERC20 for IERC20;
+
     address _investTo;
 
-    constructor(IERC20 assetToken_, string memory name_, address vault_)
-        BaseStrategy(address(assetToken_), name_, vault_)
-    {
+    constructor(
+        address assetToken_,
+        string memory name_,
+        address vault_
+    ) BaseStrategy(assetToken_, name_, vault_) {
         // _investTo = StackingMock(investTo_);
     }
 

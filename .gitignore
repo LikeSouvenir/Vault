@@ -25,5 +25,7 @@ foundry/out/
 foundry/cache/
 
 slither-env/
+subgraph/
 
+*MetaInfo.md
 temp.md

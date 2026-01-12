@@ -16,13 +16,13 @@ interface IUniswapV2Router {
     ) external returns (uint256[] memory amounts);
 }
 
-contract CompoundUSDCStrategy is BaseStrategy {
+contract CompoundUsdcStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
 
     IComet private comet;
     ICometRewards public cometRewards;
     address public immutable COMP;
-    address public immutable uniswapRouter;
+    address public immutable UNISWAP_ROUTER;
 
     constructor(
         address comet_,
@@ -41,7 +41,7 @@ contract CompoundUSDCStrategy is BaseStrategy {
         comet = IComet(comet_);
         cometRewards = ICometRewards(cometRewards_);
         COMP = rewardToken_;
-        uniswapRouter = uniswapRouter_;
+        UNISWAP_ROUTER = uniswapRouter_;
 
         address token = comet.baseToken();
         require(token == token_, "invalid token");
@@ -96,7 +96,7 @@ contract CompoundUSDCStrategy is BaseStrategy {
         path[0] = COMP;
         path[1] = address(_asset);
 
-        IUniswapV2Router(uniswapRouter)
+        IUniswapV2Router(UNISWAP_ROUTER)
             .swapExactTokensForTokens(
                 rewardBalance,
                 0, // любой курс
