@@ -15,15 +15,15 @@ states/
 .env.local
 
 .idea/
-slither-env/
 vscode/
 node_modules/
 package-lock.json
 
-lib/
-broadcast/
-out/
-cache/
+foundry/lib/
+foundry/broadcast/
+foundry/out/
+foundry/cache/
+
+slither-env/
 
 temp.md
-test/SimpleFork.t.sol

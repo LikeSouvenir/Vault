@@ -106,8 +106,6 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      */
     function pull(uint256 amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns (uint256 value) {
         require(amount <= _lastTotalAssets, "insufficient assets");
-        console.log("amount", amount);
-        console.log("_lastTotalAssets", _lastTotalAssets);
 
         _lastTotalAssets -= amount;
         value = _pull(amount);

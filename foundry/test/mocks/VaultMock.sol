@@ -12,11 +12,11 @@ interface IVault {
 }
 
 contract VaultMock is IVault {
-    Erc20Mock assetToken;
-    uint256 profit;
-    uint256 loss;
-    uint256 strategyTotalAsset;
-    bool isRebalanceWork;
+    Erc20Mock internal assetToken;
+    uint256 internal _profit;
+    uint256 internal _loss;
+    uint256 internal strategyTotalAsset;
+    bool internal isRebalanceWork;
 
     struct StrategyInfo {
         uint256 balance;
@@ -24,7 +24,7 @@ contract VaultMock is IVault {
         uint16 sharePercent;
         uint16 performanceFee; // The percent in basis points of profit that is charged as a fee.
     }
-    mapping(IBaseStrategy => uint256) balances;
+    mapping(IBaseStrategy => uint256) internal balances;
 
     constructor(Erc20Mock _assetToken) {
         assetToken = _assetToken;
@@ -49,23 +49,25 @@ contract VaultMock is IVault {
             assetToken.burn(address(strategy), balance - strategyTotalAsset);
         }
         (profit, loss) = strategy.report();
+        _profit = profit;
+        _loss = loss;
     }
 
     function rebalance(IBaseStrategy strategy) external {
         if (!isRebalanceWork) {
             return;
         }
-        if (profit > 0) {
-            strategyTotalAsset += profit;
+        if (_profit > 0) {
+            strategyTotalAsset += _profit;
 
-            assetToken.mint(address(this), profit);
+            assetToken.mint(address(this), _profit);
 
-            assetToken.approve(address(strategy), profit);
-            strategy.push(profit);
-        } else if (strategyTotalAsset > loss) {
-            strategyTotalAsset -= loss;
+            assetToken.approve(address(strategy), _profit);
+            strategy.push(_profit);
+        } else if (strategyTotalAsset > _loss) {
+            strategyTotalAsset -= _loss;
 
-            strategy.pull(loss);
+            strategy.pull(_loss);
         }
     }
 }

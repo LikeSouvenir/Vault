@@ -1,9 +1,9 @@
 [submodule "lib/forge-std"]
-	path = lib/forge-std
+	path = foundry/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
 [submodule "lib/openzeppelin-contracts"]
-	path = lib/openzeppelin-contracts
+	path = foundry/lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
 [submodule "lib/comet"]
-	path = lib/comet
+	path = foundry/lib/comet
 	url = https://github.com/compound-finance/comet
