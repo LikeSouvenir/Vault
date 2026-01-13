@@ -12,6 +12,8 @@ import {IBaseStrategy} from "../src/interfaces/IBaseStrategy.sol";
 import {CompoundUsdcStrategy} from "../src/CompoundUsdcStrategy.sol";
 import {AaveUsdcStrategy} from "../src/AaveUsdcStrategy.sol";
 
+import "forge-std/Test.sol";
+
 uint16 constant DEFAULT_SHARE_PERCENT = 5_000;
 
 contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
@@ -42,7 +44,7 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
             IERC20(usdc),
             "Vault Share Token",
             "VST",
-            msg.sender,
+            defaultManager,
             defaultFeeRecipient
         );
 
@@ -75,10 +77,10 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
 
         // updates roles
         vault.grantRole(vault.KEEPER_ROLE(), defaultManager);
-        vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), defaultManager);
-        vault.revokeRole(vault.DEFAULT_ADMIN_ROLE(), msg.sender);
 
         vm.stopBroadcast();
+        console.log("defaultManager", defaultManager);
+        console.log("msg sender", msg.sender);
 
         // set addresses
         config.set("vault_usdc", address(vault));
