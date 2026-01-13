@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {Vault} from "../../src/Vault.sol";
 import {BaseStrategy} from "../../src/BaseStrategy.sol";
 import {CompoundUsdcStrategy} from "../../src/CompoundUsdcStrategy.sol";
-import {AaveStrategy} from "../../src/AaveStrategy.sol";
+import {AaveUsdcStrategy} from "../../src/AaveUsdcStrategy.sol";
 import {IComet} from "../../src/interfaces/IComet.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -35,7 +35,7 @@ address constant feeRecipient = 0x8A969F0C98ff14c5fa92d75aadE3f329141a3384;
 contract TestIntegVault is Test {
     Vault vault;
     CompoundUsdcStrategy compoundV3;
-    AaveStrategy aave;
+    AaveUsdcStrategy aave;
 
     address keeper = vm.addr(3);
     address user1 = vm.addr(4);
@@ -64,7 +64,7 @@ contract TestIntegVault is Test {
             address(COMP),
             UNISWAP_V2_ROUTER
         );
-        //         aave = new AaveStrategy(address(stackingMock), address(WETH), "aaveStrategy", address(vault));
+        //         aave = new AaveUsdcStrategy.sol(address(stackingMock), address(WETH), "aaveStrategy", address(vault));
 
         deal(address(COMP), user1, 100 ether);
         deal(address(COMP), user2, 100 ether);

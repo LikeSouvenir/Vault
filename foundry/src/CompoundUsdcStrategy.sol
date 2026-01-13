@@ -3,18 +3,9 @@ pragma solidity ^0.8.0;
 
 import {BaseStrategy} from "./BaseStrategy.sol";
 import {IComet, ICometRewards} from "./interfaces/IComet.sol";
+import {IUniswapV2Router} from  "./interfaces/IUniswapV2Router.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
-interface IUniswapV2Router {
-    function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-}
 
 contract CompoundUsdcStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
@@ -23,6 +14,7 @@ contract CompoundUsdcStrategy is BaseStrategy {
     ICometRewards public cometRewards;
     address public immutable COMP;
     address public immutable UNISWAP_ROUTER;
+    uint public swapDeadline = 1 hours;
 
     constructor(
         address comet_,
@@ -52,14 +44,15 @@ contract CompoundUsdcStrategy is BaseStrategy {
 
     function _pull(uint256 _amount) internal virtual override returns (uint256) {
         uint256 balanceBefore = IERC20(_asset).balanceOf(address(this));
-        uint256 balance = comet.balanceOf(address(this));
 
         if (_amount > balanceBefore) {
             _claimRewards();
             _swapRewardsToAsset();
+
+            uint256 balance = comet.balanceOf(address(this));
+            comet.withdraw(address(_asset), _amount);
         }
 
-        comet.withdraw(address(_asset), _amount);
         uint256 balanceAfter = IERC20(_asset).balanceOf(address(this));
 
         return balanceAfter - balanceBefore;
@@ -84,7 +77,7 @@ contract CompoundUsdcStrategy is BaseStrategy {
 
     function _claimRewards() internal {
         // В Compound v3 награды через отдельный контракт
-        // Для примера предположим, исполльзуем метод claim
+        // Для примера, исполльзуем метод claim
         try cometRewards.claim(address(comet), address(this), true) {} catch {}
     }
 
@@ -102,12 +95,16 @@ contract CompoundUsdcStrategy is BaseStrategy {
                 0, // любой курс
                 path,
                 address(this),
-                block.timestamp + 1 hours
+                block.timestamp + swapDeadline
             );
     }
 
     function harvest() external onlyRole(KEEPER_ROLE) {
         _claimRewards();
         _swapRewardsToAsset();
+    }
+
+    function setSwapDeadline(uint delay) external onlyRole(DEFAULT_ADMIN_ROLE){
+        swapDeadline = delay;
     }
 }
