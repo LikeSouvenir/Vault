@@ -18,7 +18,9 @@ contract DeployCompoundUsdcStrategy is Script, Config {
         address cometRewards = config.get("comet_rewards").toAddress();
         address usdc = config.get("usdc").toAddress();
         address comp = config.get("comp").toAddress();
-        address vault = config.get("vault").toAddress();
+//        address vault = config.get("vault").toAddress();
+
+        address vault = 0x8425eBdc68f16c44195d9F8e14C4F54e3BacAB33;
 
         address token = ERC4626(vault).asset();
         require(token == usdc, "incorrect asset token");

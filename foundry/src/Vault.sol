@@ -40,7 +40,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     /// @dev 365.2425 days
     uint256 internal constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
     /// @notice Keeper role (bot/operator)
-    bytes32 private constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
+    bytes32 public constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
 
     /// @notice The percent in basis points of profit that is charged as a fee.
     uint16 private _managementFee;

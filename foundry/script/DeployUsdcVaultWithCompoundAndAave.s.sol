@@ -12,7 +12,7 @@ import {IBaseStrategy} from "../src/interfaces/IBaseStrategy.sol";
 import {CompoundUsdcStrategy} from "../src/CompoundUsdcStrategy.sol";
 import {AaveUsdcStrategy} from "../src/AaveUsdcStrategy.sol";
 
-uint constant DEFAULT_SHARE_PERCENT = 5_000;
+uint16 constant DEFAULT_SHARE_PERCENT = 5_000;
 
 contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
     function run() external returns (Vault) {
@@ -21,7 +21,6 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         address defaultManager = vm.envAddress("DEV_PUBLIC_KEY");
         address defaultFeeRecipient =  vm.envAddress("RECIPIENT_PUBLIC_KEY");
 
-        address vault = config.get("vault").toAddress();
         address usdc = config.get("usdc").toAddress();
 
         // CompoundV3
@@ -31,18 +30,15 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         address comp = config.get("comp").toAddress();
 
         // Aave
-        address aavePool = config.get("aave_v3_pool").toAddress();
-        address aToken = config.get("aave_v3_usdc_aToken").toAddress();
-        address aaveRewardsController = config.get("aave_v3_rewards").toAddress();
-        address aaveRewardToken = config.get("aave_reward_token").toAddress();
-
-        address token = ERC4626(vault).asset();
-        require(token == usdc, "incorrect asset token");
+//        address aavePool = config.get("aave_v3_pool").toAddress();
+//        address aToken = config.get("aave_v3_usdc_aToken").toAddress();
+//        address aaveRewardsController = config.get("aave_v3_rewards").toAddress();
+//        address aaveRewardToken = config.get("aave_reward_token").toAddress();
 
         vm.startBroadcast();
 
         // Vault
-        IVault vault = new Vault(
+        Vault vault = new Vault(
             IERC20(usdc),
             "Vault Share Token",
             "VST",
@@ -62,20 +58,20 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         );
 
         // Aave strategy
-        IBaseStrategy aaveV3 = new AaveUsdcStrategy(
-            aavePool,
-            usdc,
-            "AaveV3",
-            address(vault),
-            aToken,
-            aaveRewardsController,
-            aaveRewardToken,
-            uniswapV2Router
-        );
+//        IBaseStrategy aaveV3 = new AaveUsdcStrategy(
+//            aavePool,
+//            usdc,
+//            "AaveV3",
+//            address(vault),
+//            aToken,
+//            aaveRewardsController,
+//            aaveRewardToken,
+//            uniswapV2Router
+//        );
 
         // add strategies
         vault.add(compoundV3, DEFAULT_SHARE_PERCENT);
-        vault.add(aaveV3, DEFAULT_SHARE_PERCENT);
+//        vault.add(aaveV3, DEFAULT_SHARE_PERCENT);
 
         // updates roles
         vault.grantRole(vault.KEEPER_ROLE(), defaultManager);
@@ -87,7 +83,7 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         // set addresses
         config.set("vault_usdc", address(vault));
         config.set("compound_strategy_usdc", address(compoundV3));
-        config.set("aave_strategy_usdc", address(aaveV3));
+//        config.set("aave_strategy_usdc", address(aaveV3));
 
         return vault;
     }

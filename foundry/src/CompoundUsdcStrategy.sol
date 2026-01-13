@@ -10,8 +10,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract CompoundUsdcStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
 
-    IComet private comet;
-    ICometRewards public cometRewards;
+    IComet private immutable COMET;
+    ICometRewards public immutable COMET_REWARDS;
     address public immutable COMP;
     address public immutable UNISWAP_ROUTER;
     uint public swapDeadline = 1 hours;
@@ -30,12 +30,12 @@ contract CompoundUsdcStrategy is BaseStrategy {
         require(rewardToken_ != address(0), "zero reward token address");
         require(uniswapRouter_ != address(0), "zero uniswap router");
 
-        comet = IComet(comet_);
-        cometRewards = ICometRewards(cometRewards_);
+        COMET = IComet(comet_);
+        COMET_REWARDS = ICometRewards(cometRewards_);
         COMP = rewardToken_;
         UNISWAP_ROUTER = uniswapRouter_;
 
-        address token = comet.baseToken();
+        address token = COMET.baseToken();
         require(token == token_, "invalid token");
 
         IERC20(token_).forceApprove(comet_, type(uint256).max);
@@ -49,8 +49,8 @@ contract CompoundUsdcStrategy is BaseStrategy {
             _claimRewards();
             _swapRewardsToAsset();
 
-            uint256 balance = comet.balanceOf(address(this));
-            comet.withdraw(address(_asset), _amount);
+            uint256 balance = COMET.balanceOf(address(this));
+            COMET.withdraw(address(_asset), _amount);
         }
 
         uint256 balanceAfter = IERC20(_asset).balanceOf(address(this));
@@ -59,8 +59,8 @@ contract CompoundUsdcStrategy is BaseStrategy {
     }
 
     function _push(uint256 _amount) internal virtual override {
-        _asset.approve(address(comet), _amount);
-        comet.supply(address(_asset), _amount);
+        _asset.approve(address(COMET), _amount);
+        COMET.supply(address(_asset), _amount);
     }
 
     function _harvestAndReport() internal virtual override returns (uint256 _totalAssets) {
@@ -72,13 +72,13 @@ contract CompoundUsdcStrategy is BaseStrategy {
             _push(assetBalance);
         }
 
-        return comet.balanceOf(address(this));
+        return COMET.balanceOf(address(this));
     }
 
     function _claimRewards() internal {
         // В Compound v3 награды через отдельный контракт
         // Для примера, исполльзуем метод claim
-        try cometRewards.claim(address(comet), address(this), true) {} catch {}
+        try COMET_REWARDS.claim(address(COMET), address(this), true) {} catch {}
     }
 
     function _swapRewardsToAsset() internal {

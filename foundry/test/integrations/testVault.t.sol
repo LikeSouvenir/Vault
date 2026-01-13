@@ -55,10 +55,10 @@ contract TestIntegVault is Test {
         require(address(COMET_USDC).code.length > 0, "Comet haven't code");
         require(IComet(COMET_USDC).balanceOf(address(this)) != type(uint256).max, "Comet unsupported WETH");
 
-        compoundV3 = new CompoundUSDCStrategy(
+        compoundV3 = new CompoundUsdcStrategy(
             COMET_USDC,
             address(USDC),
-            "compoundUSDCStrategy",
+            "CompoundUsdcStrategy",
             address(vault),
             COMET_REWARDS,
             address(COMP),
@@ -153,10 +153,10 @@ contract TestIntegVault is Test {
 
         skip(1 days);
         vm.startPrank(manager);
-        CompoundUsdcStrategy newCompoundV3 = new CompoundUSDCStrategy(
+        CompoundUsdcStrategy newCompoundV3 = new CompoundUsdcStrategy(
             COMET_USDC,
             address(USDC),
-            "compoundUSDCStrategy",
+            "CompoundUsdcStrategy",
             address(vault),
             COMET_REWARDS,
             address(COMP),
