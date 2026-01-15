@@ -1,0 +1,74 @@
+specVersion: 1.3.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: Vault
+    network: sepolia
+    source:
+      address: "0xa660A8e072E549E63c0Df220BBC917Fa91bBe361"
+      abi: Vault
+      startBlock: 10036075
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Approval
+        - Deposit
+        - Reported
+        - RoleAdminChanged
+        - RoleGranted
+        - RoleRevoked
+        - StrategyAdded
+        - StrategyMigrated
+        - StrategyRemoved
+        - Transfer
+        - UpdateManagementFee
+        - UpdateManagementRecipient
+        - UpdatePerformanceFee
+        - UpdateStrategyInfo
+        - UpdateStrategySharePercent
+        - UpdateWithdrawalQueue
+        - Withdraw
+      abis:
+        - name: Vault
+          file: ./abis/Vault.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+        - event: Deposit(indexed address,indexed address,uint256,uint256)
+          handler: handleDeposit
+        - event: Reported(uint256,uint256,uint256,uint256)
+          handler: handleReported
+        - event: RoleAdminChanged(indexed bytes32,indexed bytes32,indexed bytes32)
+          handler: handleRoleAdminChanged
+        - event: RoleGranted(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleGranted
+        - event: RoleRevoked(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleRevoked
+        - event: StrategyAdded(indexed address)
+          handler: handleStrategyAdded
+        - event: StrategyMigrated(indexed address,indexed address)
+          handler: handleStrategyMigrated
+        - event: StrategyRemoved(indexed address,uint256)
+          handler: handleStrategyRemoved
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+        - event: UpdateManagementFee(indexed uint16)
+          handler: handleUpdateManagementFee
+        - event: UpdateManagementRecipient(indexed address)
+          handler: handleUpdateManagementRecipient
+        - event: UpdatePerformanceFee(indexed address,indexed uint16)
+          handler: handleUpdatePerformanceFee
+        - event: UpdateStrategyInfo(indexed address,uint256)
+          handler: handleUpdateStrategyInfo
+        - event: UpdateStrategySharePercent(indexed address,uint256)
+          handler: handleUpdateStrategySharePercent
+        - event: UpdateWithdrawalQueue(address[20])
+          handler: handleUpdateWithdrawalQueue
+        - event: Withdraw(indexed address,indexed address,indexed address,uint256,uint256)
+          handler: handleWithdraw
+      file: ./src/vault.ts
