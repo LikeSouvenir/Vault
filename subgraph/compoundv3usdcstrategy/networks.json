@@ -1,0 +1,8 @@
+{
+  "sepolia": {
+    "CompoundUsdcStrategy": {
+      "address": "0xe06c2009702eD79A2FEBcD3AC451d5e81C3D78Ce",
+      "startBlock": 10036075
+    }
+  }
+}

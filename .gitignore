@@ -25,7 +25,14 @@ foundry/out/
 foundry/cache/
 
 slither-env/
-subgraph/
+abi/
+subgraph/build
+subgraph/node_modules
+subgraph/tests
+subgraph/package-lock.json
+
 
 *MetaInfo.md
 temp.md
+openzeppelin-relayer/
+
