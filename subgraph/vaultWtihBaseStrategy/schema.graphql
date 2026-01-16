@@ -1,0 +1,264 @@
+type Approval @entity(immutable: true) {
+    id: Bytes!
+    owner: Bytes! # address
+    spender: Bytes! # address
+    value: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type Deposit @entity(immutable: true) {
+    id: Bytes!
+    sender: Bytes! # address
+    owner: Bytes! # address
+    assets: BigInt! # uint256
+    shares: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type Reported @entity(immutable: true) {
+    id: Bytes!
+    profit: BigInt! # uint256
+    loss: BigInt! # uint256
+    managementFees: BigInt! # uint256
+    performanceFees: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type RoleAdminChanged @entity(immutable: true) {
+    id: Bytes!
+    role: Bytes! # bytes32
+    previousAdminRole: Bytes! # bytes32
+    newAdminRole: Bytes! # bytes32
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type RoleGranted @entity(immutable: true) {
+    id: Bytes!
+    role: Bytes! # bytes32
+    account: Bytes! # address
+    sender: Bytes! # address
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type RoleRevoked @entity(immutable: true) {
+    id: Bytes!
+    role: Bytes! # bytes32
+    account: Bytes! # address
+    sender: Bytes! # address
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyAdded @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes! # address
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyMigrated @entity(immutable: true) {
+    id: Bytes!
+    oldVersion: Bytes! # address
+    newVersion: Bytes! # address
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyRemoved @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes! # address
+    totalAssets: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type Transfer @entity(immutable: true) {
+    id: Bytes!
+    from: Bytes! # address
+    to: Bytes! # address
+    value: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type UpdateManagementFee @entity(immutable: true) {
+    id: Bytes!
+    fee: Int! # uint16
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type UpdateManagementRecipient @entity(immutable: true) {
+    id: Bytes!
+    recipient: Bytes! # address
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type UpdatePerformanceFee @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes! # address
+    newFee: Int! # uint16
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type UpdateStrategyInfo @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes! # address
+    newBalance: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type UpdateStrategySharePercent @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes! # address
+    newPercent: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type UpdateWithdrawalQueue @entity(immutable: true) {
+    id: Bytes!
+    queue: [Bytes!]! # address[20]
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type Withdraw @entity(immutable: true) {
+    id: Bytes!
+    sender: Bytes! # address
+    receiver: Bytes! # address
+    owner: Bytes! # address
+    assets: BigInt! # uint256
+    shares: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+#####################
+#   BaseStrategy    #
+######################
+type StrategyMetaInfo @entity (immutable: false){
+    id: Bytes!
+    vault: Bytes!
+    name: String
+    addedAt: BigInt!
+    removedAt: BigInt
+    totalAssets: BigInt
+    sharePercent: BigInt
+    isPaused: Boolean!
+}
+
+type StrategyEmergencyWithdraw @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes! # address BaseStrategy
+    timestamp: BigInt! # uint256
+    amount: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyPull @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    assetPull: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyPush @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    assetPush: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyReport @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    time: BigInt! # uint256
+    profit: BigInt! # uint256
+    loss: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyRoleAdminChanged @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    role: Bytes! # bytes32
+    previousAdminRole: Bytes! # bytes32
+    newAdminRole: Bytes! # bytes32
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyRoleGranted @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    role: Bytes! # bytes32
+    account: Bytes! # address
+    sender: Bytes! # address
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyRoleRevoked @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    role: Bytes! # bytes32
+    account: Bytes! # address
+    sender: Bytes! # address
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+#base-strategy
+type StrategyPaused @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    timestamp: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+
+type StrategyUnpaused @entity(immutable: true) {
+    id: Bytes!
+    strategy: Bytes!
+    timestamp: BigInt! # uint256
+    blockNumber: BigInt!
+    blockTimestamp: BigInt!
+    transactionHash: Bytes!
+}
+

@@ -1,0 +1,130 @@
+specVersion: 1.3.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: Vault
+    network: sepolia
+    source:
+      address: "0xa660A8e072E549E63c0Df220BBC917Fa91bBe361"
+      abi: Vault
+      startBlock: 10036075
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        #        input / output
+        - Approval
+        - Deposit
+        - Withdraw
+        - Transfer
+        #       report / rebalance
+        - Reported
+        - UpdateStrategyInfo
+        - UpdateStrategySharePercent
+        #       manage strategies
+        - StrategyAdded
+        - StrategyRemoved
+        - StrategyMigrated
+        #       manage fees
+        - UpdateManagementRecipient
+        - UpdateManagementFee
+        - UpdatePerformanceFee
+        #       manage withdrawal queue
+        - UpdateWithdrawalQueue
+        #       manage role
+        - RoleAdminChanged
+        - RoleGranted
+        - RoleRevoked
+      abis:
+        - name: Vault
+          file: ./abis/Vault.json
+      eventHandlers:
+        #        input / output
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+        - event: Deposit(indexed address,indexed address,uint256,uint256)
+          handler: handleDeposit
+        - event: Withdraw(indexed address,indexed address,indexed address,uint256,uint256)
+          handler: handleWithdraw
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+        #       report / rebalance
+        - event: Reported(uint256,uint256,uint256,uint256)
+          handler: handleReported
+        - event: UpdateStrategyInfo(indexed address,uint256)
+          handler: handleUpdateStrategyInfo
+        - event: UpdateStrategySharePercent(indexed address,uint256)
+          handler: handleUpdateStrategySharePercent
+        #       manage strategies
+        - event: StrategyAdded(indexed address)
+          handler: handleStrategyAdded
+        - event: StrategyMigrated(indexed address,indexed address)
+          handler: handleStrategyMigrated
+        - event: StrategyRemoved(indexed address,uint256)
+          handler: handleStrategyRemoved
+        #       manage fees
+        - event: UpdateManagementFee(indexed uint16)
+          handler: handleUpdateManagementFee
+        - event: UpdateManagementRecipient(indexed address)
+          handler: handleUpdateManagementRecipient
+        - event: UpdatePerformanceFee(indexed address,indexed uint16)
+          handler: handleUpdatePerformanceFee
+        #       manage withdrawal queue
+        - event: UpdateWithdrawalQueue(address[20])
+          handler: handleUpdateWithdrawalQueue
+        #       manage role
+        - event: RoleAdminChanged(indexed bytes32,indexed bytes32,indexed bytes32)
+          handler: handleRoleAdminChanged
+        - event: RoleGranted(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleGranted
+        - event: RoleRevoked(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleRevoked
+      file:
+        ./src/vault.ts
+templates:
+  - kind: ethereum/contract
+    name: BaseStrategy
+    network: sepolia
+    source:
+      abi: BaseStrategy
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - StrategyEmergencyWithdraw
+        - StrategyPull
+        - StrategyPush
+        - StrategyReport
+        - StrategyRoleAdminChanged
+        - StrategyRoleGranted
+        - StrategyRoleRevoked
+        - StrategyPaused
+        - StrategyUnpaused
+      abis:
+        - name: BaseStrategy
+          file: ./abis/BaseStrategy.json
+      eventHandlers:
+        - event: EmergencyWithdraw(uint256,uint256)
+          handler: handleEmergencyWithdraw
+        - event: Pull(uint256)
+          handler: handlePull
+        - event: Push(uint256)
+          handler: handlePush
+        - event: Report(indexed uint256,indexed uint256,indexed uint256)
+          handler: handleReport
+        - event: RoleAdminChanged(indexed bytes32,indexed bytes32,indexed bytes32)
+          handler: handleRoleAdminChanged
+        - event: RoleGranted(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleGranted
+        - event: RoleRevoked(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleRevoked
+        - event: StrategyPaused(indexed uint256)
+          handler: handleStrategyPaused
+        - event: StrategyUnpaused(indexed uint256)
+          handler: handleStrategyUnpaused
+      file: ./src/base-strategy.ts

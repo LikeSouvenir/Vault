@@ -30,10 +30,10 @@ subgraph/vaultWtihBaseStrategy/build
 subgraph/vaultWtihBaseStrategy/node_modules
 subgraph/vaultWtihBaseStrategy/tests
 subgraph/vaultWtihBaseStrategy/package-lock.json
+subgraph/vaultWtihBaseStrategy/.gitignore
 
 subgraph/compound-v-3-strategy
 subgraph/vault
-subgraph/vaultWtihBaseStrategy
 
 
 *MetaInfo.md
