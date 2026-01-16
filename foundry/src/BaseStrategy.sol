@@ -122,11 +122,11 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:emits Report
      */
     function report()
-        external
-        virtual
-        nonReentrant
-        onlyRole(DEFAULT_ADMIN_ROLE)
-        returns (uint256 profit, uint256 loss)
+    external
+    virtual
+    nonReentrant
+    onlyRole(DEFAULT_ADMIN_ROLE)
+    returns (uint256 profit, uint256 loss)
     {
         uint256 newTotalAssets = _harvestAndReport();
 
@@ -146,7 +146,7 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
      */
     function takeAndClose() external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 amount) {
-        amount = _withdraw();
+        amount = _emergencyWithdraw();
     }
 
     /**
@@ -155,12 +155,12 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:emits EmergencyWithdraw
      */
     function emergencyWithdraw() external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 amount) {
-        amount = _withdraw();
+        amount = _emergencyWithdraw();
 
         emit EmergencyWithdraw(block.timestamp, amount);
     }
 
-    function _withdraw() internal returns (uint256 amount) {
+    function _emergencyWithdraw() internal returns (uint256 amount) {
         if (!_isPaused) {
             uint256 total = _harvestAndReport();
             if (total > 0) {

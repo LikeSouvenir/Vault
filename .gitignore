@@ -26,10 +26,14 @@ foundry/cache/
 
 slither-env/
 abi/
-subgraph/build
-subgraph/node_modules
-subgraph/tests
-subgraph/package-lock.json
+subgraph/vaultWtihBaseStrategy/build
+subgraph/vaultWtihBaseStrategy/node_modules
+subgraph/vaultWtihBaseStrategy/tests
+subgraph/vaultWtihBaseStrategy/package-lock.json
+
+subgraph/compound-v-3-strategy
+subgraph/vault
+subgraph/vaultWtihBaseStrategy
 
 
 *MetaInfo.md
