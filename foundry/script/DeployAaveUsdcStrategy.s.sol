@@ -21,14 +21,7 @@ contract DeployAaveUsdcStrategy is Script, Config {
 
         vm.startBroadcast();
         IBaseStrategy strategy = new AaveUsdcStrategy(
-            aavePool,
-            usdc,
-            "AaveV3",
-            vault,
-            aToken,
-            rewardsController,
-            rewardToken,
-            uniswapV2Router
+            aavePool, usdc, "AaveV3", vault, aToken, rewardsController, rewardToken, uniswapV2Router
         );
 
         vm.stopBroadcast();

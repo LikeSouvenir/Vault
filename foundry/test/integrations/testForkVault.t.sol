@@ -32,7 +32,7 @@ IERC20 constant COMP = IERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
 address constant manager = 0x1C969b20A5985c02721FCa20c44F9bf8931856a8;
 address constant feeRecipient = 0x8A969F0C98ff14c5fa92d75aadE3f329141a3384;
 
-contract TestIntegVault is Test {
+contract testForkVault is Test {
     Vault vault;
     CompoundUsdcStrategy compoundV3;
     AaveUsdcStrategy aave;
@@ -44,13 +44,7 @@ contract TestIntegVault is Test {
     function setUp() public {
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
 
-        vault = new Vault(
-            USDC,
-            "vaultShare",
-            "VS",
-            manager,
-            feeRecipient
-        );
+        vault = new Vault(USDC, "vaultShare", "VS", manager, feeRecipient);
 
         require(address(COMET_USDC).code.length > 0, "Comet haven't code");
         require(IComet(COMET_USDC).balanceOf(address(this)) != type(uint256).max, "Comet unsupported WETH");

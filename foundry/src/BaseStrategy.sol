@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 import {IVault} from "./interfaces/IVault.sol";
 import {IBaseStrategy} from "./interfaces/IBaseStrategy.sol";
@@ -38,8 +39,8 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:requires vault_ must not be zero address
      */
     constructor(address assetToken_, string memory name_, address vault_) {
-        require(assetToken_ != address(0), "zero address");
-        require(vault_ != address(0), "zero address");
+        require(assetToken_ != address(0), "assetToken zero address");
+        require(vault_ != address(0), "vault zero address");
 
         _asset = IERC20(assetToken_);
         _vault = vault_;
@@ -74,12 +75,10 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
     function _harvestAndReport() internal virtual returns (uint256 _totalAssets);
 
     /**
-     * @inheritdoc IBaseStrategy
-     * @custom:modifier onlyRole(KEEPER_ROLE) Only keeper
+     * @inheritdoc IERC165
      */
-    function reportAndInvest() external virtual onlyRole(KEEPER_ROLE) {
-        IVault(_vault).report(this);
-        IVault(_vault).rebalance(this);
+    function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControl, IERC165) returns (bool) {
+        return interfaceId == type(IBaseStrategy).interfaceId || super.supportsInterface(interfaceId);
     }
 
     /**
@@ -151,6 +150,7 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
 
     /**
      * @inheritdoc IBaseStrategy
+     * @notice Pauses the strategy, withdraws all assets to contract
      * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
      * @custom:emits EmergencyWithdraw
      */
@@ -175,6 +175,7 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
 
     /**
      * @inheritdoc IBaseStrategy
+     * @notice Pauses the strategy, withdraws all assets to contract
      * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
      * @custom:emits StrategyPaused
      */

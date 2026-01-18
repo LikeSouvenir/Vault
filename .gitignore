@@ -23,6 +23,8 @@ foundry/lib/
 foundry/broadcast/
 foundry/out/
 foundry/cache/
+foundry/lcov.info
+foundry/coverage_report/
 
 slither-env/
 abi/
@@ -36,6 +38,7 @@ subgraph/compound-v-3-strategy
 subgraph/vault
 
 
+*Result.md
 *MetaInfo.md
 temp.md
 openzeppelin-relayer/

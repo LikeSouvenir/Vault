@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {BaseStrategy} from "./BaseStrategy.sol";
 import {IComet, ICometRewards} from "./interfaces/IComet.sol";
-import {IUniswapV2Router} from  "./interfaces/IUniswapV2Router.sol";
+import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -14,7 +14,7 @@ contract CompoundUsdcStrategy is BaseStrategy {
     ICometRewards public immutable COMET_REWARDS;
     address public immutable COMP;
     address public immutable UNISWAP_ROUTER;
-    uint public swapDeadline = 1 hours;
+    uint256 public swapDeadline = 1 hours;
 
     constructor(
         address comet_,
@@ -50,6 +50,8 @@ contract CompoundUsdcStrategy is BaseStrategy {
             _swapRewardsToAsset();
 
             uint256 balance = COMET.balanceOf(address(this));
+            if (_amount > balance) _amount = balance;
+
             COMET.withdraw(address(_asset), _amount);
         }
 
@@ -59,7 +61,10 @@ contract CompoundUsdcStrategy is BaseStrategy {
     }
 
     function _push(uint256 _amount) internal virtual override {
-        _asset.approve(address(COMET), _amount);
+        require(
+            _asset.approve(address(COMET), _amount),
+            "approve failed"
+        );
         COMET.supply(address(_asset), _amount);
     }
 
@@ -83,13 +88,12 @@ contract CompoundUsdcStrategy is BaseStrategy {
 
     function _swapRewardsToAsset() internal {
         uint256 rewardBalance = IERC20(COMP).balanceOf(address(this));
-        if (rewardBalance == 0) return;
+        if (rewardBalance > 0) {
+            address[] memory path = new address[](2);
+            path[0] = COMP;
+            path[1] = address(_asset);
 
-        address[] memory path = new address[](2);
-        path[0] = COMP;
-        path[1] = address(_asset);
-
-        IUniswapV2Router(UNISWAP_ROUTER)
+            IUniswapV2Router(UNISWAP_ROUTER)
             .swapExactTokensForTokens(
                 rewardBalance,
                 0, // любой курс
@@ -97,6 +101,7 @@ contract CompoundUsdcStrategy is BaseStrategy {
                 address(this),
                 block.timestamp + swapDeadline
             );
+        }
     }
 
     function harvest() external onlyRole(KEEPER_ROLE) {
@@ -104,7 +109,7 @@ contract CompoundUsdcStrategy is BaseStrategy {
         _swapRewardsToAsset();
     }
 
-    function setSwapDeadline(uint delay) external onlyRole(DEFAULT_ADMIN_ROLE){
+    function setSwapDeadline(uint256 delay) external onlyRole(DEFAULT_ADMIN_ROLE) {
         swapDeadline = delay;
     }
 }

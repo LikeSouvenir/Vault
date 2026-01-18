@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
+import {IBaseStrategy} from "../../src/interfaces/IBaseStrategy.sol";
 import {BaseStrategyWrapper} from "../wrappers/BaseStrategyWrapper.sol";
-
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 import {Erc20Mock} from "../mocks/Erc20Mock.sol";
 import {StackingMock} from "../mocks/StackingMock.sol";
@@ -33,7 +34,7 @@ contract BaseStrategyWrapperTest is Test {
         stackingMock = new StackingMock(erc20Mock);
         vaultMock = new VaultMock(erc20Mock);
         strategyWrapper =
-            new BaseStrategyWrapper(address(stackingMock), erc20Mock, NAME_BASE_STRATEGY_WRAPPER, address(vaultMock));
+                    new BaseStrategyWrapper(address(stackingMock), erc20Mock, NAME_BASE_STRATEGY_WRAPPER, address(vaultMock));
 
         erc20Mock.mint(address(vaultMock), DEFAULT_BALANCE);
         erc20Mock.mint(user1, DEFAULT_BALANCE);
@@ -50,52 +51,112 @@ contract BaseStrategyWrapperTest is Test {
         vm.stopPrank();
     }
 
-    function test_BadSender_reportAndInvest() external {
-        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+    function test_supportsInterface() external view {
+        bytes4 baseStrategyInterface = type(IBaseStrategy).interfaceId;
+        bytes4 randomInterface = bytes4(keccak256("bu bu bu()"));
 
-        vm.startPrank(user1);
+        vm.assertTrue(strategyWrapper.supportsInterface(baseStrategyInterface),
+            "should support IBaseStrategy interface");
+    }
+
+    function test_Constructor_ZeroAssetToken() external {
+        vm.expectRevert(bytes("assetToken zero address"));
+        new BaseStrategyWrapper(address(stackingMock), IERC20(address(0)), "Test", address(vaultMock));
+    }
+
+    function test_Constructor_ZeroVault() external {
+        vm.expectRevert(bytes("vault zero address"));
+        new BaseStrategyWrapper(address(stackingMock), erc20Mock, "Test", address(0));
+    }
+
+    function test_takeAndClose() external {
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        uint256 initialVaultBalance = erc20Mock.balanceOf(address(vaultMock));
+
+        vm.prank(address(vaultMock));
+        uint256 withdrawnAmount = strategyWrapper.takeAndClose();
+        uint256 finalVaultBalance = erc20Mock.balanceOf(address(vaultMock));
+
+        vm.assertEq(withdrawnAmount, DEPOSIT_VALUE);
+        vm.assertEq(finalVaultBalance, initialVaultBalance + DEPOSIT_VALUE);
+        vm.assertTrue(strategyWrapper.isPaused());
+    }
+
+    function test_NotVault_takeAndClose() external {
+        vm.prank(user3);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, user1, strategyWrapper.KEEPER_ROLE()
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user3, address(0))
         );
-        strategyWrapper.reportAndInvest();
+        strategyWrapper.takeAndClose();
     }
 
-    function test_Keeper_reportAndInvest() external {
+    function test_emergencyWithdraw_WhenEmpty() external {
+        vm.prank(address(vaultMock));
+        uint256 withdrawnAmount = strategyWrapper.emergencyWithdraw();
+
+        vm.assertEq(withdrawnAmount, 0, "should return 0");
+        vm.assertTrue(strategyWrapper.isPaused(), "should be paused");
+    }
+
+    function test_emergencyWithdraw_WithBalance() external {
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        uint256 initialVaultBalance = erc20Mock.balanceOf(address(vaultMock));
+
+        vm.prank(address(vaultMock));
+        uint256 withdrawnAmount = strategyWrapper.emergencyWithdraw();
+        uint256 finalVaultBalance = erc20Mock.balanceOf(address(vaultMock));
+
+        vm.assertEq(withdrawnAmount, DEPOSIT_VALUE, "should return deposited amount");
+        vm.assertEq(finalVaultBalance, initialVaultBalance + DEPOSIT_VALUE, "vault should receive assets");
+        vm.assertTrue(strategyWrapper.isPaused(), "should be paused");
+    }
+
+    function test_NotVault_emergencyWithdraw() external {
+        vm.prank(user3);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user3, address(0))
+        );
+        strategyWrapper.emergencyWithdraw();
+    }
+
+    function test_report_WithLoss() external {
         _strategyPushAmountFromVault(DEPOSIT_VALUE);
         stackingMock.updateInvest(address(strategyWrapper));
 
-        vm.startPrank(address(vaultMock));
-        strategyWrapper.grantRole(strategyWrapper.KEEPER_ROLE(), user1);
-        vm.stopPrank();
+        vm.prank(address(vaultMock));
+        strategyWrapper.report();
 
-        uint256 totalAsset = strategyWrapper.lastTotalAssets();
-        uint256 amount = stackingMock.calculateProfit(DEPOSIT_VALUE);
-
-        vm.startPrank(user1);
-        strategyWrapper.reportAndInvest();
-
-        uint256 totalAssetAfter = strategyWrapper.lastTotalAssets();
-
-        vm.assertEq(totalAsset + amount, totalAssetAfter);
-    }
-
-    function test_reportAndInvest() external {
-        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        stackingMock.setIsReturnedProfit(false);
         stackingMock.updateInvest(address(strategyWrapper));
 
-        assertTrue(strategyWrapper.hasRole(strategyWrapper.DEFAULT_ADMIN_ROLE(), address(vaultMock)));
+        uint256 expectedLoss = stackingMock.calculateProfit(DEPOSIT_VALUE);
 
-        uint256 totalAssetBefore = strategyWrapper.lastTotalAssets();
-        uint256 amount = stackingMock.calculateProfit(DEPOSIT_VALUE);
+        vm.expectEmit(true, true, true, false);
+        emit Report(block.timestamp, 0, expectedLoss);
 
-        vm.startPrank(address(vaultMock));
-        strategyWrapper.reportAndInvest();
+        vm.prank(address(vaultMock));
+        (uint256 profit, uint256 loss) = strategyWrapper.report();
 
-        uint256 totalAssetAfter = strategyWrapper.lastTotalAssets();
+        vm.assertEq(profit, 0, "should 0");
+        vm.assertEq(loss, expectedLoss, "incorrect loss");
+    }
 
-        vm.assertEq(totalAssetBefore + amount, totalAssetAfter);
+    function test_report_ZeroProfitZeroLoss() external {
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+
+        vm.prank(address(vaultMock));
+        (uint256 profit, uint256 loss) = strategyWrapper.report();
+
+        vm.assertEq(profit, 0, "should bu 0");
+        vm.assertEq(loss, 0, "should be 0 ");
+    }
+
+    function test_pull_InsufficientAssets() external {
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+
+        vm.prank(address(vaultMock));
+        vm.expectRevert(bytes("insufficient assets"));
+        strategyWrapper.pull(DEPOSIT_VALUE + 1);
     }
 
     function test_report() external {
@@ -284,6 +345,8 @@ contract BaseStrategyWrapperTest is Test {
     event StrategyUnpaused(uint256 indexed timestamp);
 
     event StrategyPaused(uint256 indexed timestamp);
+
+    event EmergencyWithdraw(uint256 indexed timestamp, uint256 indexed amount);
 
     function test_eventPull() external {
         _strategyPushAmountFromVault(DEPOSIT_VALUE);

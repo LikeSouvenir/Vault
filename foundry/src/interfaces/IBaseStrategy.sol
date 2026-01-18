@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+
 /**
  * @title IBaseStrategy - Interface for Base Strategy Contract
  * @notice Defines the interface for asset management strategies
  */
-interface IBaseStrategy {
-    /**
-     * @notice Report and reinvest
-     */
-    function reportAndInvest() external;
-
+interface IBaseStrategy is IAccessControl, IERC165 {
     /**
      * @notice Deposit assets into strategy
      * @param amount Amount of assets to deposit

@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IBaseStrategy} from "./IBaseStrategy.sol";
+import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 uint256 constant MAXIMUM_STRATEGIES = 20;
 
@@ -10,11 +11,11 @@ uint256 constant MAXIMUM_STRATEGIES = 20;
  * @title IVault - Interface for Vault Contract
  * @notice IERC-4626 compliant vault with strategy management capabilities
  */
-interface IVault is IERC4626 {
+interface IVault is IERC4626, IERC165 {
     /**
      * @notice Adds a new strategy to the vault
      * @param newStrategy Address of the new strategy
-     * @param sharePercent Asset allocation percentage for the strategy
+     * @param sharePercent Asset allocation percentage in basis points (0.01% = 1) for the strategy
      */
     function add(IBaseStrategy newStrategy, uint16 sharePercent) external;
 
@@ -94,9 +95,25 @@ interface IVault is IERC4626 {
 
     /**
      * @notice Unpauses a strategy
-     * @param strategy Strategy
+     * @param strategy Strategy to unpause
      */
     function unpause(IBaseStrategy strategy) external;
+
+    /**
+     * @dev GrantRole in a strategy
+     * @param strategy Strategy  where granted role
+     * @param role Role to be granted
+     * @param account Account granted role
+     */
+    function strategyGrantRole(IBaseStrategy strategy, bytes32 role, address account) external;
+
+    /**
+     * @dev GrantRole in a strategy
+     * @param strategy Strategy  where revoked role
+     * @param role Role to be revoked
+     * @param account Account revoked role
+     */
+    function strategyRevokeRole(IBaseStrategy strategy, bytes32 role, address account) external;
 
     /**
      * @notice Gets withdrawal queue
