@@ -83,6 +83,20 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
 
     /**
      * @inheritdoc IBaseStrategy
+     * @custom:modifier onlyRole(KEEPER_ROLE)
+     * @custom:modifier nonReentrant Reentrancy protection
+     */
+    function rebalanceAndReport()
+        external
+        onlyRole(KEEPER_ROLE)
+        returns (uint256 profit, uint256 loss, uint256 balance)
+    {
+        IVault(_vault).rebalance(this);
+        (profit, loss, balance) = IVault(_vault).report(this);
+    }
+
+    /**
+     * @inheritdoc IBaseStrategy
      * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
      * @custom:modifier nonReentrant Reentrancy protection
      * @custom:emits Push
@@ -121,11 +135,11 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:emits Report
      */
     function report()
-    external
-    virtual
-    nonReentrant
-    onlyRole(DEFAULT_ADMIN_ROLE)
-    returns (uint256 profit, uint256 loss)
+        external
+        virtual
+        nonReentrant
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        returns (uint256 profit, uint256 loss)
     {
         uint256 newTotalAssets = _harvestAndReport();
 

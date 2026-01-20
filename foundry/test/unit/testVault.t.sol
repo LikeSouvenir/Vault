@@ -23,6 +23,7 @@ uint16 constant MAX_PERCENT = 10_000;
 uint16 constant MIN_PERCENT = 1;
 uint256 constant MAXIMUM_STRATEGIES = 20;
 bytes32 constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
+bytes32 constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
 uint256 constant SECONDS_PER_YEAR = 31_556_952; // 365.2425 days
 uint256 constant DEFAULT_USER_BALANCE = 10_000e18;
@@ -301,11 +302,7 @@ contract VaultTest is Test {
         uint256 balanceBefore = vault.strategyBalance(strategyOne);
         uint256 bigLoss = balanceBefore * 2;
 
-        vm.mockCall(
-            address(strategyOne),
-            abi.encodeWithSelector(strategyOne.report.selector),
-            abi.encode(0, bigLoss)
-        );
+        vm.mockCall(address(strategyOne), abi.encodeWithSelector(strategyOne.report.selector), abi.encode(0, bigLoss));
 
         vm.prank(keeper);
         (uint256 profit, uint256 loss, uint256 balance) = vault.report(strategyOne);
@@ -367,14 +364,15 @@ contract VaultTest is Test {
         uint256 profit = stackingMock.calculateProfit(TEST_INVEST_VALUE);
 
         vm.startPrank(address(keeper));
-
         uint256 balanceStrategyBefore = erc20Mock.balanceOf(address(strategyOne));
         uint256 balanceVaultBefore = erc20Mock.balanceOf(address(vault));
+
         vm.assertEq(balanceVaultBefore, 0);
         vm.assertEq(balanceStrategyBefore, 0);
-
-        vault.pause(strategyOne);
         vm.stopPrank();
+
+        vm.prank(address(vault));
+        strategyOne.pause();
 
         uint256 balanceStrategyAfter = erc20Mock.balanceOf(address(strategyOne));
         uint256 balanceVaultAfter = erc20Mock.balanceOf(address(vault));
@@ -539,7 +537,7 @@ contract VaultTest is Test {
         vm.startPrank(manager);
         for (uint256 i = 0; i < MAXIMUM_STRATEGIES; i++) {
             IBaseStrategy strategy =
-                        new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
+                new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
             vault.add(strategy, TEST_STRATEGY_SHARE_PERCENT / uint16(MAXIMUM_STRATEGIES));
         }
 
@@ -551,7 +549,7 @@ contract VaultTest is Test {
         Vault otherVault = new Vault(erc20Mock, "", "", manager, feeRecipient);
 
         IBaseStrategy strategy =
-                    new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(otherVault));
+            new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(otherVault));
 
         vm.startPrank(manager);
         vm.expectRevert(bytes("bad strategy vault in"));
@@ -697,7 +695,7 @@ contract VaultTest is Test {
     function test_unsuitableTokenAdd() external {
         Erc20Mock otherErc20 = new Erc20Mock();
         IBaseStrategy strategy =
-                    new BaseStrategyWrapper(address(stackingMock), otherErc20, "BaseStrategyWrapper", address(vault));
+            new BaseStrategyWrapper(address(stackingMock), otherErc20, "BaseStrategyWrapper", address(vault));
 
         vm.startPrank(manager);
         vm.expectRevert(bytes("bad strategy asset in"));
@@ -734,8 +732,8 @@ contract VaultTest is Test {
         uint256 totalBeforePause = vault.totalAssets();
         vm.assertEq(totalBeforePause, TEST_INVEST_VALUE, "bad strategy balance");
 
-        vm.prank(keeper);
-        vault.pause(strategyOne);
+        vm.prank(address(vault));
+        strategyOne.pause();
 
         uint256 totalAfterPause = vault.totalAssets();
 
@@ -745,7 +743,6 @@ contract VaultTest is Test {
 
     function test_maxWithdraw() external {
         uint256 max = vault.maxWithdraw(user1);
-
         vm.assertEq(max, 0);
         _setUpWithStrategyOne();
         vm.stopPrank();
@@ -773,7 +770,7 @@ contract VaultTest is Test {
 
     function test_pause() external {
         _setUpWithStrategyOne();
-        vault.grantRole(KEEPER_ROLE, keeper);
+        vault.grantRole(PAUSER_ROLE, keeper);
         vm.stopPrank();
 
         vm.startPrank(keeper);
@@ -787,7 +784,7 @@ contract VaultTest is Test {
 
     function test_unpause() external {
         _setUpWithStrategyOne();
-        vault.grantRole(KEEPER_ROLE, keeper);
+        vault.grantRole(PAUSER_ROLE, keeper);
         vm.stopPrank();
 
         vm.startPrank(keeper);
@@ -909,7 +906,7 @@ contract VaultTest is Test {
 
         IBaseStrategy[MAXIMUM_STRATEGIES] memory newWithdrawalQueue;
         newWithdrawalQueue[0] =
-                    new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
+            new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
         newWithdrawalQueue[1] = strategyOne;
 
         vm.expectRevert(bytes("Cannot use to change strategies"));

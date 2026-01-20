@@ -10,6 +10,11 @@ import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
  */
 interface IBaseStrategy is IAccessControl, IERC165 {
     /**
+     * @notice Call rebalance and report from vault
+     */
+    function rebalanceAndReport() external returns (uint256 profit, uint256 loss, uint256 balance);
+
+    /**
      * @notice Deposit assets into strategy
      * @param amount Amount of assets to deposit
      */

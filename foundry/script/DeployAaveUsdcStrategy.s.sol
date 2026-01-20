@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {IBaseStrategy} from "../src/interfaces/IBaseStrategy.sol";
-import {AaveUsdcStrategy} from "../src/AaveUsdcStrategy.sol";
+import {AaveUsdcStrategy} from "../src/StrategyExamples/AaveUsdcStrategy.sol";
 
 import {Script} from "forge-std/Script.sol";
 import {Config} from "forge-std/Config.sol";

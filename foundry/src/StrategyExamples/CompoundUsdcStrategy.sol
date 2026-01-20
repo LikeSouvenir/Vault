@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import {BaseStrategy} from "./BaseStrategy.sol";
-import {IComet, ICometRewards} from "./interfaces/IComet.sol";
-import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
+import {BaseStrategy} from "../BaseStrategy.sol";
+import {IComet, ICometRewards} from "../interfaces/IComet.sol";
+import {IUniswapV2Router} from "../interfaces/IUniswapV2Router.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract CompoundUsdcStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
 
-    IComet private immutable COMET;
-    ICometRewards public immutable COMET_REWARDS;
-    address public immutable COMP;
-    address public immutable UNISWAP_ROUTER;
+    IComet private immutable comet;
+    ICometRewards public immutable cometReward;
+    address public immutable comp;
+    address public immutable uniswapRouter;
     uint256 public swapDeadline = 1 hours;
 
     constructor(
@@ -30,12 +30,12 @@ contract CompoundUsdcStrategy is BaseStrategy {
         require(rewardToken_ != address(0), "zero reward token address");
         require(uniswapRouter_ != address(0), "zero uniswap router");
 
-        COMET = IComet(comet_);
-        COMET_REWARDS = ICometRewards(cometRewards_);
-        COMP = rewardToken_;
-        UNISWAP_ROUTER = uniswapRouter_;
+        comet = IComet(comet_);
+        cometReward = ICometRewards(cometRewards_);
+        comp = rewardToken_;
+        uniswapRouter = uniswapRouter_;
 
-        address token = COMET.baseToken();
+        address token = comet.baseToken();
         require(token == token_, "invalid token");
 
         IERC20(token_).forceApprove(comet_, type(uint256).max);
@@ -49,10 +49,10 @@ contract CompoundUsdcStrategy is BaseStrategy {
             _claimRewards();
             _swapRewardsToAsset();
 
-            uint256 balance = COMET.balanceOf(address(this));
+            uint256 balance = comet.balanceOf(address(this));
             if (_amount > balance) _amount = balance;
 
-            COMET.withdraw(address(_asset), _amount);
+            comet.withdraw(address(_asset), _amount);
         }
 
         uint256 balanceAfter = IERC20(_asset).balanceOf(address(this));
@@ -61,11 +61,8 @@ contract CompoundUsdcStrategy is BaseStrategy {
     }
 
     function _push(uint256 _amount) internal virtual override {
-        require(
-            _asset.approve(address(COMET), _amount),
-            "approve failed"
-        );
-        COMET.supply(address(_asset), _amount);
+        require(_asset.approve(address(comet), _amount), "approve failed");
+        comet.supply(address(_asset), _amount);
     }
 
     function _harvestAndReport() internal virtual override returns (uint256 _totalAssets) {
@@ -77,30 +74,30 @@ contract CompoundUsdcStrategy is BaseStrategy {
             _push(assetBalance);
         }
 
-        return COMET.balanceOf(address(this));
+        return comet.balanceOf(address(this));
     }
 
     function _claimRewards() internal {
         // В Compound v3 награды через отдельный контракт
         // Для примера, исполльзуем метод claim
-        try COMET_REWARDS.claim(address(COMET), address(this), true) {} catch {}
+        try cometReward.claim(address(comet), address(this), true) {} catch {}
     }
 
     function _swapRewardsToAsset() internal {
-        uint256 rewardBalance = IERC20(COMP).balanceOf(address(this));
+        uint256 rewardBalance = IERC20(comp).balanceOf(address(this));
         if (rewardBalance > 0) {
             address[] memory path = new address[](2);
-            path[0] = COMP;
+            path[0] = comp;
             path[1] = address(_asset);
 
-            IUniswapV2Router(UNISWAP_ROUTER)
-            .swapExactTokensForTokens(
-                rewardBalance,
-                0, // любой курс
-                path,
-                address(this),
-                block.timestamp + swapDeadline
-            );
+            IUniswapV2Router(uniswapRouter)
+                .swapExactTokensForTokens(
+                    rewardBalance,
+                    0, // любой курс
+                    path,
+                    address(this),
+                    block.timestamp + swapDeadline
+                );
         }
     }
 

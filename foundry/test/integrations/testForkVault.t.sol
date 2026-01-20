@@ -3,8 +3,8 @@ pragma solidity ^0.8.0;
 
 import {Vault} from "../../src/Vault.sol";
 import {BaseStrategy} from "../../src/BaseStrategy.sol";
-import {CompoundUsdcStrategy} from "../../src/CompoundUsdcStrategy.sol";
-import {AaveUsdcStrategy} from "../../src/AaveUsdcStrategy.sol";
+import {CompoundUsdcStrategy} from "../../src/StrategyExamples/CompoundUsdcStrategy.sol";
+import {AaveUsdcStrategy} from "../../src/StrategyExamples/AaveUsdcStrategy.sol";
 import {IComet} from "../../src/interfaces/IComet.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -96,6 +96,32 @@ contract testForkVault is Test {
         deal(address(token), address(strategy), strategyBalance + 1000 * 1e18);
     }
 
+    function testRebalanceAndReport() public {
+        _investUsdcFromUser(user1);
+        _investUsdcFromUser(user2);
+        _rebalanceStrategy(compoundV3);
+
+        vm.startPrank(manager);
+        vault.strategyGrantRole(compoundV3, compoundV3.KEEPER_ROLE(), keeper);
+        vm.stopPrank();
+
+        uint256 balanceUsdcBefore = vault.strategyBalance(compoundV3);
+
+        _mintStrategy(compoundV3, COMP);
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss, uint256 balance) = compoundV3.rebalanceAndReport();
+
+        vm.assertEq(loss, 0);
+        vm.assertGt(profit, 0);
+        vm.assertGt(balance, balanceUsdcBefore);
+
+        uint256 balanceUsdcAfter = vault.strategyBalance(compoundV3);
+
+        console.log("balance", balance);
+        console.log("balanceUsdcBefore", balanceUsdcBefore);
+        console.log("balanceUsdcAfter", balanceUsdcAfter);
+    }
+
     function testUniswapInteraction() public {
         _investUsdcFromUser(user1);
         _investUsdcFromUser(user2);
@@ -135,12 +161,10 @@ contract testForkVault is Test {
         vm.prank(user1);
         vault.redeem(shares, user1, user1);
 
-        // check user profit
         uint256 finalBalance = USDC.balanceOf(user1);
         assertGt(finalBalance, INVEST_VALUE_USDC - 1, "profit less than invest amount");
     }
 
-    // Тест миграции
     function testMigrateStrategy() public {
         _investUsdcFromUser(user1);
         _rebalanceStrategy(compoundV3);

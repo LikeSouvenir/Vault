@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 //import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IBaseStrategy} from "../src/interfaces/IBaseStrategy.sol";
-import {CompoundUsdcStrategy} from "../src/CompoundUsdcStrategy.sol";
+import {CompoundUsdcStrategy} from "../src/StrategyExamples/CompoundUsdcStrategy.sol";
 
 import {Script} from "forge-std/Script.sol";
 import {Config} from "forge-std/Config.sol";

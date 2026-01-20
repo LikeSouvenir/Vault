@@ -34,12 +34,9 @@ import {
     UpdateStrategyInfo,
     UpdateStrategySharePercent,
     UpdateWithdrawalQueue,
-    Withdraw,
-    StrategyMetaInfo
+    Withdraw
 } from "../generated/schema"
-import {Address, BigInt, Bytes, ethereum} from "@graphprotocol/graph-ts"
-import {BaseStrategy as BaseStrategyTemplate} from "../generated/templates";
-import {BaseStrategy} from "../generated/templates/BaseStrategy/BaseStrategy";
+import { Bytes } from "@graphprotocol/graph-ts"
 
 export function handleApproval(event: ApprovalEvent): void {
     let entity = new Approval(
@@ -134,7 +131,6 @@ export function handleRoleRevoked(event: RoleRevokedEvent): void {
 }
 
 export function handleStrategyAdded(event: StrategyAddedEvent): void {
-    BaseStrategyTemplate.create(event.params.strategy)
     let entity = new StrategyAdded(
         event.transaction.hash.concatI32(event.logIndex.toI32())
     )
@@ -144,13 +140,10 @@ export function handleStrategyAdded(event: StrategyAddedEvent): void {
     entity.blockTimestamp = event.block.timestamp
     entity.transactionHash = event.transaction.hash
 
-    createStrategyMetaInfoEntity(event, event.params.strategy)
-
     entity.save()
 }
 
 export function handleStrategyMigrated(event: StrategyMigratedEvent): void {
-    BaseStrategyTemplate.create(event.params.newVersion)
     let entity = new StrategyMigrated(
         event.transaction.hash.concatI32(event.logIndex.toI32())
     )
@@ -161,12 +154,8 @@ export function handleStrategyMigrated(event: StrategyMigratedEvent): void {
     entity.blockTimestamp = event.block.timestamp
     entity.transactionHash = event.transaction.hash
 
-    removeStrategyMetaInfoEntity(event, event.params.oldVersion)
-    createStrategyMetaInfoEntity(event, event.params.newVersion)
-
     entity.save()
 }
-
 
 export function handleStrategyRemoved(event: StrategyRemovedEvent): void {
     let entity = new StrategyRemoved(
@@ -179,37 +168,7 @@ export function handleStrategyRemoved(event: StrategyRemovedEvent): void {
     entity.blockTimestamp = event.block.timestamp
     entity.transactionHash = event.transaction.hash
 
-    removeStrategyMetaInfoEntity(event, event.params.strategy)
-
     entity.save()
-}
-
-function createStrategyMetaInfoEntity(event: ethereum.Event, strategyAddress: Bytes): void {
-    let newMetaInfo = StrategyMetaInfo.load(strategyAddress)
-    if (!newMetaInfo) newMetaInfo = new StrategyMetaInfo(strategyAddress)
-    newMetaInfo.vault = event.address
-    newMetaInfo.addedAt = event.block.timestamp
-    newMetaInfo.isPaused = false
-    newMetaInfo.totalAssets = BigInt.zero()
-
-    let strategyContract = BaseStrategy.bind(Address.fromBytes(strategyAddress))
-
-    let name = strategyContract.try_name()
-    if (!name.reverted) newMetaInfo.name = name.value
-
-    newMetaInfo.save()
-}
-
-function removeStrategyMetaInfoEntity(event: ethereum.Event, strategyAddress: Bytes): void {
-    let oldMetaInfo = StrategyMetaInfo.load(strategyAddress)
-    if (oldMetaInfo) {
-        oldMetaInfo.removedAt = event.block.timestamp
-        oldMetaInfo.isPaused = true
-        oldMetaInfo.sharePercent = BigInt.zero();
-        oldMetaInfo.totalAssets = BigInt.zero();
-
-        oldMetaInfo.save()
-    }
 }
 
 export function handleTransfer(event: TransferEvent): void {
@@ -300,12 +259,7 @@ export function handleUpdateStrategySharePercent(
     entity.blockTimestamp = event.block.timestamp
     entity.transactionHash = event.transaction.hash
 
-    let metaInfo = StrategyMetaInfo.load(event.params.strategy)
-    if (!metaInfo) metaInfo = new StrategyMetaInfo(event.params.strategy)
-    metaInfo.sharePercent = event.params.newPercent;
-
     entity.save()
-    metaInfo.save()
 }
 
 export function handleUpdateWithdrawalQueue(

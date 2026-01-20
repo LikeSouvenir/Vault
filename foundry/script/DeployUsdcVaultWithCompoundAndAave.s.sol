@@ -9,8 +9,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVault} from "../src/interfaces/IVault.sol";
 import {Vault} from "../src/Vault.sol";
 import {IBaseStrategy} from "../src/interfaces/IBaseStrategy.sol";
-import {CompoundUsdcStrategy} from "../src/CompoundUsdcStrategy.sol";
-import {AaveUsdcStrategy} from "../src/AaveUsdcStrategy.sol";
+import {CompoundUsdcStrategy} from "../src/StrategyExamples/CompoundUsdcStrategy.sol";
+import {AaveUsdcStrategy} from "../src/StrategyExamples/AaveUsdcStrategy.sol";
 
 import "forge-std/Test.sol";
 

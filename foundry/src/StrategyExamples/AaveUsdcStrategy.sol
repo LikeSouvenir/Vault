@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import {BaseStrategy} from "./BaseStrategy.sol";
+import {BaseStrategy} from "../BaseStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IUniswapV2Router} from "./interfaces/IUniswapV2Router.sol";
-import {IPool, IRewardsController, IAToken} from "./interfaces/IAaveV3.sol";
+import {IUniswapV2Router} from "../interfaces/IUniswapV2Router.sol";
+import {IPool, IRewardsController, IAToken} from "../interfaces/IAaveV3.sol";
 
 contract AaveUsdcStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
@@ -13,8 +13,8 @@ contract AaveUsdcStrategy is BaseStrategy {
     IPool public immutable aavePool;
     IAToken public immutable aToken;
     IRewardsController public immutable rewardsController;
-    address public immutable REWARD_TOKEN;
-    address public immutable UNISWAP_V2_ROUTER;
+    address public immutable rewardToken;
+    address public immutable uniswapV2Router;
     uint256 public swapDeadline = 1 hours;
 
     constructor(
@@ -36,8 +36,8 @@ contract AaveUsdcStrategy is BaseStrategy {
         aavePool = IPool(pool_);
         aToken = IAToken(aToken_);
         rewardsController = IRewardsController(rewardsController_);
-        REWARD_TOKEN = rewardToken_;
-        UNISWAP_V2_ROUTER = uniswapRouter_;
+        rewardToken = rewardToken_;
+        uniswapV2Router = uniswapRouter_;
 
         require(aToken.UNDERLYING_ASSET_ADDRESS() == token_, "invalid aToken");
 
@@ -68,10 +68,7 @@ contract AaveUsdcStrategy is BaseStrategy {
     }
 
     function _push(uint256 _amount) internal virtual override {
-        require(
-            _asset.approve(address(aToken), _amount),
-            "approve failed"
-        );
+        require(_asset.approve(address(aToken), _amount), "approve failed");
         aavePool.supply(address(_asset), _amount, address(this), 0);
     }
 
@@ -95,11 +92,11 @@ contract AaveUsdcStrategy is BaseStrategy {
         assets[0] = address(aToken);
 
         // Проверяем доступные награды
-        uint256 pendingRewards = rewardsController.getUserRewards(assets, address(this), REWARD_TOKEN);
+        uint256 pendingRewards = rewardsController.getUserRewards(assets, address(this), rewardToken);
 
         if (pendingRewards > 0) {
             // Клеймим награды
-            rewardsController.claimRewards(assets, pendingRewards, address(this), REWARD_TOKEN);
+            rewardsController.claimRewards(assets, pendingRewards, address(this), rewardToken);
 
             // Конвертируем награды в базовый актив
             _swapRewardsToAsset();
@@ -107,15 +104,15 @@ contract AaveUsdcStrategy is BaseStrategy {
     }
 
     function _swapRewardsToAsset() internal {
-        uint256 rewardBalance = IERC20(REWARD_TOKEN).balanceOf(address(this));
+        uint256 rewardBalance = IERC20(rewardToken).balanceOf(address(this));
         if (rewardBalance > 0) {
             address[] memory path = new address[](2);
-            path[0] = REWARD_TOKEN;
+            path[0] = rewardToken;
             path[1] = address(_asset);
 
             // Используем UniswapV2 интерфейс (аналогично Compound стратегии)
-            IUniswapV2Router(UNISWAP_V2_ROUTER)
-            .swapExactTokensForTokens(rewardBalance, 0, path, address(this), block.timestamp + swapDeadline);
+            IUniswapV2Router(uniswapV2Router)
+                .swapExactTokensForTokens(rewardBalance, 0, path, address(this), block.timestamp + swapDeadline);
         }
     }
 

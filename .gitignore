@@ -28,14 +28,12 @@ foundry/coverage_report/
 
 slither-env/
 abi/
-subgraph/vaultWtihBaseStrategy/build
-subgraph/vaultWtihBaseStrategy/node_modules
-subgraph/vaultWtihBaseStrategy/tests
-subgraph/vaultWtihBaseStrategy/package-lock.json
-subgraph/vaultWtihBaseStrategy/.gitignore
-
-subgraph/compound-v-3-strategy
-subgraph/vault
+subgraph/deprecate/
+subgraph/A_deprecated/build
+subgraph/A_deprecated/node_modules
+subgraph/A_deprecated/tests
+subgraph/A_deprecated/package-lock.json
+subgraph/A_deprecated/.gitignore
 
 
 *Result.md

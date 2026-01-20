@@ -41,6 +41,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     bytes32 public constant EMERGENCY_ADMIN_ROLE = keccak256("EMERGENCY_ADMIN_ROLE");
     /// @notice Keeper role (bot/operator)
     bytes32 public constant KEEPER_ROLE = keccak256("KEEPER_ROLE");
+    /// @notice Pauser role
+    /// @notice can pause & unpause strategies
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     /// @notice The percent in basis points of profit that is charged as a fee.
     uint16 private _managementFee;
     /// @notice The address to pay the `performanceFee` to.
@@ -103,11 +106,20 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @param strategy Strategy to check for IBaseStrategy support
+     * @notice Internal function to check IBaseStrategy support
+     * @param strategy Strategy to check
      */
     modifier supportIBaseStrategyInterface(IERC165 strategy) {
-        require(strategy.supportsInterface(type(IBaseStrategy).interfaceId), "unsupported IBaseStrategy");
+        _supportIBaseStrategyInterface(strategy);
         _;
+    }
+
+    /**
+     * @notice Internal function to check IBaseStrategy support
+     * @param strategy Strategy to check
+     */
+    function _supportIBaseStrategyInterface(IERC165 strategy) internal view {
+        require(strategy.supportsInterface(type(IBaseStrategy).interfaceId), "unsupported IBaseStrategy");
     }
 
     /**
@@ -192,11 +204,11 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:emits StrategyAdded
      */
     function add(IBaseStrategy newStrategy, uint16 sharePercent)
-    external
-    onlyRole(DEFAULT_ADMIN_ROLE)
-    supportIBaseStrategyInterface(IERC165(newStrategy))
-    checkAsset(newStrategy)
-    checkVault(newStrategy)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        supportIBaseStrategyInterface(IERC165(newStrategy))
+        checkAsset(newStrategy)
+        checkVault(newStrategy)
     {
         require(
             IERC20(asset()).allowance(address(newStrategy), address(this)) == type(uint256).max,
@@ -218,6 +230,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
         setSharePercent(newStrategy, sharePercent);
         info.lastTakeTime = uint96(block.timestamp);
         info.performanceFee = DEFAULT_PERFORMANCE_FEE;
+        _grantRole(KEEPER_ROLE, address(newStrategy));
 
         emit StrategyAdded(address(newStrategy));
     }
@@ -233,16 +246,17 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:emits StrategyMigrated
      */
     function migrate(IBaseStrategy oldStrategy, IBaseStrategy newStrategy)
-    external
-    onlyRole(DEFAULT_ADMIN_ROLE)
-    supportIBaseStrategyInterface(IERC165(newStrategy))
-    checkAsset(newStrategy)
-    checkVault(newStrategy)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        supportIBaseStrategyInterface(IERC165(newStrategy))
+        checkAsset(newStrategy)
+        checkVault(newStrategy)
     {
         require(_strategyInfoMap[newStrategy].sharePercent == 0, "strategy already exist");
         StrategyInfo memory info = _strategyInfoMap[oldStrategy];
 
         delete _strategyInfoMap[oldStrategy];
+        _revokeRole(KEEPER_ROLE, address(oldStrategy));
 
         for (uint256 i = 0; i < MAXIMUM_STRATEGIES; i++) {
             if (address(_withdrawalQueue[i]) == address(oldStrategy)) {
@@ -253,6 +267,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
                     sharePercent: info.sharePercent,
                     performanceFee: info.performanceFee
                 });
+                _grantRole(KEEPER_ROLE, address(newStrategy));
 
                 (uint256 profit, uint256 loss,) = _report(oldStrategy, false);
 
@@ -272,10 +287,10 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:modifier nonReentrant Reentrancy protection
      */
     function withdraw(uint256 assets, address receiver, address owner)
-    public
-    override(ERC4626, IERC4626)
-    nonReentrant
-    returns (uint256)
+        public
+        override(ERC4626, IERC4626)
+        nonReentrant
+        returns (uint256)
     {
         return super.withdraw(assets, receiver, owner);
     }
@@ -285,10 +300,10 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:modifier nonReentrant Reentrancy protection
      */
     function redeem(uint256 shares, address receiver, address owner)
-    public
-    override(ERC4626, IERC4626)
-    nonReentrant
-    returns (uint256)
+        public
+        override(ERC4626, IERC4626)
+        nonReentrant
+        returns (uint256)
     {
         return super.redeem(shares, receiver, owner);
     }
@@ -302,8 +317,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param shares Amount of shares to burn
      */
     function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares)
-    internal
-    override
+        internal
+        override
     {
         uint256 thisBalance = IERC20(asset()).balanceOf(address(this));
         if (thisBalance < assets) {
@@ -319,7 +334,6 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
                 uint256 balanceBefore = info.balance;
                 uint256 take = needed < balanceBefore ? needed : balanceBefore;
 
-                uint256 requireBalance = balanceBefore - take;
                 info.balance -= strategy.pull(take);
 
                 if (needed <= balanceBefore - info.balance) {
@@ -339,9 +353,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:emits Reported
      */
     function report(IBaseStrategy strategy)
-    external
-    onlyRole(KEEPER_ROLE)
-    returns (uint256 profit, uint256 loss, uint256 balance)
+        external
+        onlyRole(KEEPER_ROLE)
+        returns (uint256 profit, uint256 loss, uint256 balance)
     {
         return _report(strategy, true);
     }
@@ -351,9 +365,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param strategy Strategy to report on
      */
     function _report(IBaseStrategy strategy, bool update)
-    internal
-    notPaused(strategy)
-    returns (uint256 profit, uint256 loss, uint256 balance)
+        internal
+        notPaused(strategy)
+        returns (uint256 profit, uint256 loss, uint256 balance)
     {
         (profit, loss) = strategy.report();
         uint256 currentPerformanceFee = 0;
@@ -459,6 +473,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
         _withdrawalQueue[MAXIMUM_STRATEGIES - 1] = IBaseStrategy(address(0));
         require(find, "strategy not removed");
 
+        _revokeRole(KEEPER_ROLE, address(strategy));
         delete _strategyInfoMap[strategy];
 
         amountAssets = strategy.takeAndClose();
@@ -498,9 +513,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:emits UpdateStrategySharePercent
      */
     function setSharePercent(IBaseStrategy strategy, uint16 sharePercent)
-    public
-    onlyRole(DEFAULT_ADMIN_ROLE)
-    checkBorderBps(sharePercent)
+        public
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        checkBorderBps(sharePercent)
     {
         uint16 currentPercent = _strategyInfoMap[strategy].sharePercent;
         uint256 totalSharePercent = 0;
@@ -529,9 +544,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:emits UpdatePerformanceFee
      */
     function setPerformanceFee(IBaseStrategy strategy, uint16 newFee)
-    external
-    onlyRole(DEFAULT_ADMIN_ROLE)
-    checkBorderBps(newFee)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        checkBorderBps(newFee)
     {
         _strategyInfoMap[strategy].performanceFee = newFee;
 
@@ -576,19 +591,19 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
 
     /**
      * @inheritdoc IVault
-     * @custom:modifier onlyRole(KEEPER_ROLE) Only keeper
+     * @custom:modifier onlyRole(PAUSER_ROLE) Only pauser manager
      * @custom:modifier notPaused Strategy must not already be paused
      */
-    function pause(IBaseStrategy strategy) external onlyRole(KEEPER_ROLE) notPaused(strategy) {
+    function pause(IBaseStrategy strategy) external onlyRole(PAUSER_ROLE) notPaused(strategy) {
         strategy.pause();
     }
 
     /**
      * @inheritdoc IVault
-     * @custom:modifier onlyRole(KEEPER_ROLE) Only keeper
+     * @custom:modifier onlyRole(PAUSER_ROLE) Only pauser manager
      * @custom:requires Strategy must be paused
      */
-    function unpause(IBaseStrategy strategy) external onlyRole(KEEPER_ROLE) {
+    function unpause(IBaseStrategy strategy) external onlyRole(PAUSER_ROLE) {
         require(strategy.isPaused(), "not paused");
         strategy.unpause();
     }
@@ -597,8 +612,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @inheritdoc IVault
      */
     function strategyGrantRole(IBaseStrategy strategy, bytes32 role, address account)
-    external
-    onlyRole(DEFAULT_ADMIN_ROLE)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         if (account == address(this)) return;
         strategy.grantRole(role, account);
@@ -608,8 +623,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @inheritdoc IVault
      */
     function strategyRevokeRole(IBaseStrategy strategy, bytes32 role, address account)
-    public
-    onlyRole(DEFAULT_ADMIN_ROLE)
+        public
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         if (account == address(this)) return;
         strategy.revokeRole(role, account);

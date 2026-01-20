@@ -34,7 +34,7 @@ contract BaseStrategyWrapperTest is Test {
         stackingMock = new StackingMock(erc20Mock);
         vaultMock = new VaultMock(erc20Mock);
         strategyWrapper =
-                    new BaseStrategyWrapper(address(stackingMock), erc20Mock, NAME_BASE_STRATEGY_WRAPPER, address(vaultMock));
+            new BaseStrategyWrapper(address(stackingMock), erc20Mock, NAME_BASE_STRATEGY_WRAPPER, address(vaultMock));
 
         erc20Mock.mint(address(vaultMock), DEFAULT_BALANCE);
         erc20Mock.mint(user1, DEFAULT_BALANCE);
@@ -55,8 +55,9 @@ contract BaseStrategyWrapperTest is Test {
         bytes4 baseStrategyInterface = type(IBaseStrategy).interfaceId;
         bytes4 randomInterface = bytes4(keccak256("bu bu bu()"));
 
-        vm.assertTrue(strategyWrapper.supportsInterface(baseStrategyInterface),
-            "should support IBaseStrategy interface");
+        vm.assertTrue(
+            strategyWrapper.supportsInterface(baseStrategyInterface), "should support IBaseStrategy interface"
+        );
     }
 
     function test_Constructor_ZeroAssetToken() external {
@@ -117,6 +118,46 @@ contract BaseStrategyWrapperTest is Test {
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user3, address(0))
         );
         strategyWrapper.emergencyWithdraw();
+    }
+
+    function test_RebalanceAndReport_NotKeeper() external {
+        vm.startPrank(user3);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                user3,
+                strategyWrapper.KEEPER_ROLE()
+            )
+        );
+        strategyWrapper.rebalanceAndReport();
+    }
+
+    function test_RebalanceAndReport_Success() external {
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
+
+        vm.mockCall(
+            address(vaultMock),
+            abi.encodeWithSignature("rebalance(address)", address(strategyWrapper)),
+            abi.encode()
+        );
+
+        uint256 expectedProfit = 100;
+        uint256 expectedLoss = 0;
+        uint256 expectedBalance = DEPOSIT_VALUE + expectedProfit;
+
+        vm.mockCall(
+            address(vaultMock),
+            abi.encodeWithSignature("report(address)", address(strategyWrapper)),
+            abi.encode(expectedProfit, expectedLoss, expectedBalance)
+        );
+
+        vm.prank(address(vaultMock));
+        (uint256 profit, uint256 loss, uint256 balance) = strategyWrapper.rebalanceAndReport();
+
+        vm.assertEq(profit, expectedProfit, "bad profit");
+        vm.assertEq(loss, expectedLoss, "bad loss");
+        vm.assertEq(balance, expectedBalance, "bad balance");
     }
 
     function test_report_WithLoss() external {
