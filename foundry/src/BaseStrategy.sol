@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
-// pragma solidity 0.8.33;
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -180,11 +179,11 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
             if (total > 0) {
                 _pull(total);
             }
+            _isPaused = true;
         }
 
         amount = IERC20(_asset).balanceOf(address(this));
         SafeERC20.safeTransfer(IERC20(_asset), address(_vault), amount);
-        _isPaused = true;
     }
 
     /**

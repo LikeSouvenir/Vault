@@ -19,7 +19,6 @@ vscode/
 node_modules/
 package-lock.json
 
-foundry/lib/
 foundry/broadcast/
 foundry/out/
 foundry/cache/

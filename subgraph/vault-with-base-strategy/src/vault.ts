@@ -37,7 +37,7 @@ import {
     Withdraw,
     StrategyMetaInfo
 } from "../generated/schema"
-import {Address, BigInt, Bytes, ethereum} from "@graphprotocol/graph-ts"
+import {Address, BigInt, Bytes, Entity, ethereum} from "@graphprotocol/graph-ts"
 import {BaseStrategy as BaseStrategyTemplate} from "../generated/templates";
 import {BaseStrategy} from "../generated/templates/BaseStrategy/BaseStrategy";
 
@@ -301,11 +301,26 @@ export function handleUpdateStrategySharePercent(
     entity.transactionHash = event.transaction.hash
 
     let metaInfo = StrategyMetaInfo.load(event.params.strategy)
-    if (!metaInfo) metaInfo = new StrategyMetaInfo(event.params.strategy)
-    metaInfo.sharePercent = event.params.newPercent;
+    if (!metaInfo) {
+        let newMetaInfo = new StrategyMetaInfo(event.params.strategy)
+        newMetaInfo.vault = event.address
+        newMetaInfo.addedAt = event.block.timestamp
+        newMetaInfo.isPaused = false
+        newMetaInfo.totalAssets = BigInt.zero()
+        newMetaInfo.sharePercent = event.params.newPercent;
+
+        let strategyContract = BaseStrategy.bind(Address.fromBytes(event.params.strategy))
+
+        let name = strategyContract.try_name()
+        if (!name.reverted) newMetaInfo.name = name.value
+
+        newMetaInfo.save()
+    } else {
+        metaInfo.sharePercent = event.params.newPercent;
+        metaInfo.save()
+    }
 
     entity.save()
-    metaInfo.save()
 }
 
 export function handleUpdateWithdrawalQueue(

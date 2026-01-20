@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import {BaseStrategy} from "../BaseStrategy.sol";
 import {IComet, ICometRewards} from "../interfaces/IComet.sol";
