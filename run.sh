@@ -1,1 +1,0 @@
-forge script --chain sepolia --broadcast --rpc-url $SEPOLIA_RPC_URL  ./script/DeployUsdcVaultWithCompoundAndAave.s.sol:DeployUsdcVaultWithCompoundAndAave --verify --verifier etherscan --etherscan-api-key $ETHERSCAN_API_KEY --private-key $DEV_PRIVATE_KEY --optimize --md > MetaInfo.md

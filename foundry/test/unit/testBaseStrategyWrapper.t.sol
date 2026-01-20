@@ -124,9 +124,7 @@ contract BaseStrategyWrapperTest is Test {
         vm.startPrank(user3);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                user3,
-                strategyWrapper.KEEPER_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, user3, strategyWrapper.KEEPER_ROLE()
             )
         );
         strategyWrapper.rebalanceAndReport();
@@ -137,9 +135,7 @@ contract BaseStrategyWrapperTest is Test {
         stackingMock.updateInvest(address(strategyWrapper));
 
         vm.mockCall(
-            address(vaultMock),
-            abi.encodeWithSignature("rebalance(address)", address(strategyWrapper)),
-            abi.encode()
+            address(vaultMock), abi.encodeWithSignature("rebalance(address)", address(strategyWrapper)), abi.encode()
         );
 
         uint256 expectedProfit = 100;

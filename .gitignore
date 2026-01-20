@@ -28,7 +28,6 @@ foundry/coverage_report/
 
 slither-env/
 abi/
-subgraph/deprecate/
 subgraph/vault-with-base-strategy/build
 subgraph/vault-with-base-strategy/node_modules
 subgraph/vault-with-base-strategy/tests
