@@ -1,5 +1,5 @@
 # Summary
-- [Home](README.md)
+- [Home](../../README.md)
 # src
   - [❱ StrategyExamples](src/StrategyExamples/README.md)
     - [AaveUsdcStrategy](src/StrategyExamples/AaveUsdcStrategy.sol/contract.AaveUsdcStrategy.md)
