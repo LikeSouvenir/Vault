@@ -249,8 +249,6 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     {
         require(address(_withdrawalQueue[MAXIMUM_STRATEGIES - 1]) == address(0), OutOfLimitStrategies());
 
-        StrategyInfo storage info = _strategyInfoMap[newStrategy];
-
         for (uint256 i = 0; i < MAXIMUM_STRATEGIES; i++) {
             if (address(_withdrawalQueue[i]) == address(0)) {
                 _withdrawalQueue[i] = newStrategy;
@@ -258,9 +256,14 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
             }
         }
 
+        _strategyInfoMap[newStrategy] = StrategyInfo({
+            balance: 0,
+            lastTakeTime: uint96(block.timestamp),
+            sharePercent: 0,
+            performanceFee: DEFAULT_PERFORMANCE_FEE
+        });
+
         setSharePercent(newStrategy, sharePercent);
-        info.lastTakeTime = uint96(block.timestamp);
-        info.performanceFee = DEFAULT_PERFORMANCE_FEE;
         _grantRole(KEEPER_ROLE, address(newStrategy));
 
         emit StrategyAdded(address(newStrategy));
@@ -406,31 +409,40 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
         uint256 currentManagementFee = 0;
         StrategyInfo storage info = _strategyInfoMap[strategy];
 
+        uint256 oldBalance = info.balance;
+        uint256 newBalance = oldBalance;
+
         if (loss > 0 && update) {
-            if (info.balance < loss) {
-                info.balance = 0;
+            if (oldBalance < loss) {
+                newBalance = 0;
             } else {
-                info.balance -= loss;
+                unchecked {
+                    newBalance -= loss;
+                }
             }
         }
 
         if (profit > 0) {
             if (update) {
-                info.balance += profit;
+                unchecked {
+                    newBalance += profit;
+                }
             }
 
-            currentPerformanceFee = (profit * info.performanceFee) / BPS;
-            uint256 currentFee = currentPerformanceFee;
+            unchecked {
+                currentPerformanceFee = (profit * info.performanceFee) / BPS;
+            }
 
-            if (_managementFee != 0) {
+            if (_managementFee > 0) {
                 uint256 time = block.timestamp - info.lastTakeTime;
                 if (update) {
                     info.lastTakeTime = uint96(block.timestamp);
                 }
-                currentManagementFee = (info.balance * _managementFee * time) / (BPS * SECONDS_PER_YEAR);
-
-                currentFee += currentManagementFee;
+                unchecked {
+                    currentManagementFee = (newBalance * _managementFee * time) / (BPS * SECONDS_PER_YEAR);
+                }
             }
+            uint256 currentFee = currentPerformanceFee + currentManagementFee;
 
             if (currentFee > 0) {
                 if (profit < currentFee) {
@@ -439,7 +451,10 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
                 _mint(_feeRecipient, previewDeposit(currentFee));
             }
         }
-        balance = info.balance;
+
+        if (update && newBalance != oldBalance) info.balance = newBalance;
+
+        balance = newBalance;
 
         emit Reported(profit, loss, currentManagementFee, currentPerformanceFee);
     }
@@ -461,21 +476,21 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param strategy Strategy to rebalance
      */
     function _rebalance(IBaseStrategy strategy) internal notPaused(strategy) exists(strategy) {
-        StrategyInfo storage info = _strategyInfoMap[strategy];
+        StrategyInfo memory info = _strategyInfoMap[strategy];
 
         uint256 amount = totalAssets() * info.sharePercent / BPS;
         uint256 currentBalance = info.balance;
 
         if (currentBalance < amount) {
             uint256 toDeposit = amount - currentBalance;
-            info.balance += toDeposit;
+            _strategyInfoMap[strategy].balance += toDeposit;
 
             IERC20(asset()).forceApprove(address(strategy), toDeposit);
             strategy.push(toDeposit);
         } else if (currentBalance > amount) {
             uint256 toWithdraw = currentBalance - amount;
 
-            info.balance -= strategy.pull(toWithdraw);
+            _strategyInfoMap[strategy].balance -= strategy.pull(toWithdraw);
         }
 
         emit UpdateStrategyInfo(strategy, amount);
@@ -499,11 +514,14 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
             if (address(_withdrawalQueue[i]) == address(strategy)) {
                 find = true;
             }
-            if (find && i != MAXIMUM_STRATEGIES - 1) {
-                _withdrawalQueue[i] = _withdrawalQueue[i + 1];
+            if (find) {
+                for (uint256 j = i; j < MAXIMUM_STRATEGIES - 1; j++) {
+                    _withdrawalQueue[j] = _withdrawalQueue[j + 1];
+                }
+                _withdrawalQueue[MAXIMUM_STRATEGIES - 1] = IBaseStrategy(address(0));
+                break;
             }
         }
-        _withdrawalQueue[MAXIMUM_STRATEGIES - 1] = IBaseStrategy(address(0));
 
         _revokeRole(KEEPER_ROLE, address(strategy));
         delete _strategyInfoMap[strategy];
@@ -558,8 +576,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
             if (address(currentStrategy) == address(0)) {
                 break;
             }
-
-            totalSharePercent += _strategyInfoMap[currentStrategy].sharePercent;
+            unchecked {
+                totalSharePercent += _strategyInfoMap[currentStrategy].sharePercent;
+            }
         }
 
         require(totalSharePercent - currentPercent + sharePercent <= MAX_PERCENT, IncorrectMax());
@@ -748,8 +767,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @inheritdoc ERC4626
      * @dev Includes balance in vault itself and all active strategies
      */
-    function totalAssets() public view override(ERC4626, IVault) returns (uint256) {
-        uint256 vaultBalance = IERC20(asset()).balanceOf(address(this));
+    function totalAssets() public view override(ERC4626, IVault) returns (uint256 total) {
+        total = IERC20(asset()).balanceOf(address(this));
 
         for (uint256 i = 0; i < MAXIMUM_STRATEGIES; i++) {
             IBaseStrategy strategy = _withdrawalQueue[i];
@@ -757,16 +776,17 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
                 break;
             }
 
-            try strategy.isPaused() returns (bool isPaused) {
-                if (isPaused) continue;
-            } catch {
-                continue;
+            uint256 balance = _strategyInfoMap[strategy].balance;
+            if (balance > 0) {
+                try strategy.isPaused() returns (bool isPaused) {
+                    if (!isPaused) total += balance;
+                } catch {
+                    continue;
+                }
             }
-
-            vaultBalance += _strategyInfoMap[_withdrawalQueue[i]].balance;
         }
 
-        return vaultBalance;
+        return total;
     }
 
     /**

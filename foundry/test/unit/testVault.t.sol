@@ -204,7 +204,7 @@ contract VaultTest is Test {
         vault.report(strategyOne);
 
         uint256 recipientBalance = vault.balanceOf(feeRecipient);
-        vm.assertEq(recipientBalance, vault.previewDeposit(expectedPerformanceFee + expectedManagementFee));
+        vm.assertEq(recipientBalance, expectedPerformanceFee + expectedManagementFee);
     }
 
     function test_withLossReport() external {
@@ -361,7 +361,7 @@ contract VaultTest is Test {
         vault.report(strategyOne);
 
         uint256 recipientBalance = vault.balanceOf(feeRecipient);
-        vm.assertEq(recipientBalance, vault.previewDeposit(expectedPerformanceFee));
+        vm.assertEq(recipientBalance, expectedPerformanceFee);
     }
 
     function test_whenNotPausedEmergencyWithdraw() external {
