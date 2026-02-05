@@ -9,6 +9,47 @@ import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
  * @notice Defines the interface for asset management strategies
  */
 interface IBaseStrategy is IAccessControl, IERC165 {
+    error ZeroAddress();
+    error InsufficientAssetsToken();
+
+    /**
+     * @notice Event emitted when strategy is paused
+     * @param timestamp Block timestamp
+     */
+    event StrategyPaused(uint256 indexed timestamp);
+
+    /**
+     * @notice Event emitted when strategy is unpaused
+     * @param timestamp Block timestamp
+     */
+    event StrategyUnpaused(uint256 indexed timestamp);
+
+    /**
+     * @notice Event emitted when assets are pulled from strategy
+     * @param assetPull Amount of assets pulled
+     */
+    event Pull(uint256 assetPull);
+
+    /**
+     * @notice Event emitted when assets are pushed to strategy
+     * @param assetPush Amount of assets pushed
+     */
+    event Push(uint256 assetPush);
+
+    /**
+     * @notice Event emitted when strategy report is generated
+     * @param time Block timestamp
+     * @param profit Profit amount
+     * @param loss Loss amount
+     */
+    event Report(uint256 indexed time, uint256 indexed profit, uint256 indexed loss);
+
+    /**
+     * @notice Event emitted on emergency withdrawal
+     * @param timestamp Block timestamp
+     * @param amount Amount withdrawn
+     */
+    event EmergencyWithdraw(uint256 timestamp, uint256 amount);
     /**
      * @notice Call rebalance and report from vault
      */
@@ -85,43 +126,4 @@ interface IBaseStrategy is IAccessControl, IERC165 {
      * @return Strategy name
      */
     function name() external view returns (string memory);
-
-    /**
-     * @notice Event emitted when strategy is paused
-     * @param timestamp Block timestamp
-     */
-    event StrategyPaused(uint256 indexed timestamp);
-
-    /**
-     * @notice Event emitted when strategy is unpaused
-     * @param timestamp Block timestamp
-     */
-    event StrategyUnpaused(uint256 indexed timestamp);
-
-    /**
-     * @notice Event emitted when assets are pulled from strategy
-     * @param assetPull Amount of assets pulled
-     */
-    event Pull(uint256 assetPull);
-
-    /**
-     * @notice Event emitted when assets are pushed to strategy
-     * @param assetPush Amount of assets pushed
-     */
-    event Push(uint256 assetPush);
-
-    /**
-     * @notice Event emitted when strategy report is generated
-     * @param time Block timestamp
-     * @param profit Profit amount
-     * @param loss Loss amount
-     */
-    event Report(uint256 indexed time, uint256 indexed profit, uint256 indexed loss);
-
-    /**
-     * @notice Event emitted on emergency withdrawal
-     * @param timestamp Block timestamp
-     * @param amount Amount withdrawn
-     */
-    event EmergencyWithdraw(uint256 timestamp, uint256 amount);
 }

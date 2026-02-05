@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.20;
 
-import {BaseStrategy} from "../BaseStrategy.sol";
+import {BaseStrategy, IBaseStrategy} from "../BaseStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IUniswapV2Router} from "../interfaces/IUniswapV2Router.sol";
@@ -50,11 +50,11 @@ contract AaveUsdcStrategy is BaseStrategy {
         address rewardToken_,
         address uniswapRouter_
     ) BaseStrategy(token_, name_, vault_) {
-        require(pool_ != address(0), "zero pool address");
-        require(aToken_ != address(0), "zero aToken address");
-        require(rewardsController_ != address(0), "zero rewards controller");
-        require(rewardToken_ != address(0), "zero reward token address");
-        require(uniswapRouter_ != address(0), "zero uniswap router");
+        require(pool_ != address(0), ZeroAddress());
+        require(aToken_ != address(0), ZeroAddress());
+        require(rewardsController_ != address(0), ZeroAddress());
+        require(rewardToken_ != address(0), ZeroAddress());
+        require(uniswapRouter_ != address(0), ZeroAddress());
 
         aavePool = IPool(pool_);
         aToken = IAToken(aToken_);
@@ -62,7 +62,7 @@ contract AaveUsdcStrategy is BaseStrategy {
         rewardToken = rewardToken_;
         uniswapV2Router = uniswapRouter_;
 
-        require(aToken.UNDERLYING_ASSET_ADDRESS() == token_, "invalid aToken");
+        require(aToken.UNDERLYING_ASSET_ADDRESS() == token_, InsufficientAssetsToken());
 
         IERC20(token_).forceApprove(pool_, type(uint256).max);
         IERC20(rewardToken_).forceApprove(uniswapRouter_, type(uint256).max);
@@ -101,7 +101,7 @@ contract AaveUsdcStrategy is BaseStrategy {
      * @param _amount Amount of assets to deposit
      */
     function _push(uint256 _amount) internal virtual override {
-        require(_asset.approve(address(aToken), _amount), "approve failed");
+        _asset.forceApprove(address(aToken), _amount);
         aavePool.supply(address(_asset), _amount, address(this), 0);
     }
 

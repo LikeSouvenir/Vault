@@ -2,11 +2,8 @@
 // pragma solidity 0.8.33;
 pragma solidity ^0.8.20;
 
-import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
-import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
-import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC4626, IERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {ERC20, IERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -48,6 +45,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     uint16 private _managementFee;
     /// @notice The address to pay the `performanceFee` to.
     address private _feeRecipient;
+    /// @notice The address to which the entire balance will be transferred when call 'emergencyExit'.
+    address private _emergencyBackupAddress;
     /// @notice Withdrawal queue for strategies
     IBaseStrategy[MAXIMUM_STRATEGIES] private _withdrawalQueue;
 
@@ -84,14 +83,17 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
         string memory nameShare_,
         string memory symbolShare_,
         address manager_,
-        address feeRecipient_
+        address feeRecipient_,
+        address emergencyBackupAddress_
     ) ERC4626(assetToken_) ERC20(nameShare_, symbolShare_) {
-        require(feeRecipient_ != address(0), "feeRecipient zero address");
-        require(address(assetToken_) != address(0), "assetToken zero address");
-        require(manager_ != address(0), "manager zero address");
+        require(feeRecipient_ != address(0), ZeroAddress());
+        require(address(assetToken_) != address(0), ZeroAddress());
+        require(manager_ != address(0), ZeroAddress());
+        require(emergencyBackupAddress_ != address(0), ZeroAddress());
 
         _managementFee = DEFAULT_MANAGEMENT_FEE;
         _feeRecipient = feeRecipient_;
+        _emergencyBackupAddress = emergencyBackupAddress_;
 
         _grantRole(DEFAULT_ADMIN_ROLE, manager_);
     }
@@ -119,7 +121,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param strategy Strategy to check
      */
     function _supportIBaseStrategyInterface(IERC165 strategy) internal view {
-        require(strategy.supportsInterface(type(IBaseStrategy).interfaceId), "unsupported IBaseStrategy");
+        require(strategy.supportsInterface(type(IBaseStrategy).interfaceId), UnsupportedIBaseStrategy());
     }
 
     /**
@@ -136,8 +138,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param num Percentage value
      */
     function _checkBorderBps(uint16 num) internal pure {
-        require(num >= uint16(MIN_PERCENT), "min % is 0,01");
-        require(num <= uint16(MAX_PERCENT), "max % is 100");
+        require(num >= uint16(MIN_PERCENT), IncorrectMin());
+        require(num <= uint16(MAX_PERCENT), IncorrectMax());
     }
 
     /**
@@ -154,7 +156,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param strategy Strategy to check
      */
     function _checkAsset(IBaseStrategy strategy) internal view {
-        require(strategy.asset() == address(asset()), "bad strategy asset in");
+        require(strategy.asset() == address(asset()), InvalidAssetToken(strategy));
     }
 
     /**
@@ -171,7 +173,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param strategy Strategy to check
      */
     function _checkVault(IBaseStrategy strategy) internal view {
-        require(strategy.vault() == address(this), "bad strategy vault in");
+        require(strategy.vault() == address(this), InvalidVault(strategy));
     }
 
     /**
@@ -188,7 +190,41 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @param strategy Strategy to check
      */
     function _notPaused(IBaseStrategy strategy) internal view {
-        require(!strategy.isPaused(), "is paused");
+        require(!strategy.isPaused(), IsPaused(strategy));
+    }
+
+    /**
+     * @notice Modifier to check notExists strategy status
+     * @param strategy Strategy to check
+     */
+    modifier notExists(IBaseStrategy strategy) {
+        _notExists(strategy);
+        _;
+    }
+
+    /**
+     * @notice Internal function to check notExists strategy status
+     * @param strategy Strategy to check
+     */
+    function _notExists(IBaseStrategy strategy) internal view {
+        require(_strategyInfoMap[strategy].sharePercent == 0, StrategyExists(strategy));
+    }
+
+    /**
+     * @notice Modifier to check exists strategy status
+     * @param strategy Strategy to check
+     */
+    modifier exists(IBaseStrategy strategy) {
+        _exists(strategy);
+        _;
+    }
+
+    /**
+     * @notice Internal function to check exists strategy
+     * @param strategy Strategy to check
+     */
+    function _exists(IBaseStrategy strategy) internal view {
+        require(_strategyInfoMap[strategy].sharePercent > 0, StrategyNotExists(strategy));
     }
 
     /**
@@ -209,16 +245,11 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
         supportIBaseStrategyInterface(IERC165(newStrategy))
         checkAsset(newStrategy)
         checkVault(newStrategy)
+        notExists(newStrategy)
     {
-        require(
-            IERC20(asset()).allowance(address(newStrategy), address(this)) == type(uint256).max,
-            "must allowance type(uint256).max"
-        );
-        require(address(_withdrawalQueue[MAXIMUM_STRATEGIES - 1]) == address(0), "limited of strategy");
+        require(address(_withdrawalQueue[MAXIMUM_STRATEGIES - 1]) == address(0), OutOfLimitStrategies());
 
         StrategyInfo storage info = _strategyInfoMap[newStrategy];
-
-        require(info.sharePercent == 0, "strategy exist");
 
         for (uint256 i = 0; i < MAXIMUM_STRATEGIES; i++) {
             if (address(_withdrawalQueue[i]) == address(0)) {
@@ -251,8 +282,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
         supportIBaseStrategyInterface(IERC165(newStrategy))
         checkAsset(newStrategy)
         checkVault(newStrategy)
+        notExists(newStrategy)
+        exists(oldStrategy)
     {
-        require(_strategyInfoMap[newStrategy].sharePercent == 0, "strategy already exist");
         StrategyInfo memory info = _strategyInfoMap[oldStrategy];
 
         delete _strategyInfoMap[oldStrategy];
@@ -326,20 +358,20 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
             for (uint256 i = 0; i < MAXIMUM_STRATEGIES; i++) {
                 IBaseStrategy strategy = _withdrawalQueue[i];
 
-                StrategyInfo storage info = _strategyInfoMap[strategy];
-                if (info.balance == 0) {
+                uint256 balanceBefore = _strategyInfoMap[strategy].balance;
+                if (balanceBefore == 0) {
                     continue;
                 }
 
-                uint256 balanceBefore = info.balance;
                 uint256 take = needed < balanceBefore ? needed : balanceBefore;
 
-                info.balance -= strategy.pull(take);
+                uint256 balanceAfter = strategy.pull(take);
+                _strategyInfoMap[strategy].balance -= balanceAfter;
 
-                if (needed <= balanceBefore - info.balance) {
+                if (needed <= balanceAfter) {
                     break;
                 }
-                needed -= (balanceBefore - info.balance);
+                needed -= balanceAfter;
             }
         }
 
@@ -428,10 +460,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @notice Internal function to rebalance strategy
      * @param strategy Strategy to rebalance
      */
-    function _rebalance(IBaseStrategy strategy) internal notPaused(strategy) {
+    function _rebalance(IBaseStrategy strategy) internal notPaused(strategy) exists(strategy) {
         StrategyInfo storage info = _strategyInfoMap[strategy];
-
-        require(info.sharePercent > 0, "strategy not found");
 
         uint256 amount = totalAssets() * info.sharePercent / BPS;
         uint256 currentBalance = info.balance;
@@ -458,9 +488,12 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:requires Strategy must exist
      * @custom:emits StrategyRemoved
      */
-    function remove(IBaseStrategy strategy) external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 amountAssets) {
-        require(_strategyInfoMap[strategy].sharePercent > 0, "strategy not exist");
-
+    function remove(IBaseStrategy strategy)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        exists(strategy)
+        returns (uint256 amountAssets)
+    {
         bool find = false;
         for (uint256 i = 0; i < MAXIMUM_STRATEGIES; i++) {
             if (address(_withdrawalQueue[i]) == address(strategy)) {
@@ -471,7 +504,6 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
             }
         }
         _withdrawalQueue[MAXIMUM_STRATEGIES - 1] = IBaseStrategy(address(0));
-        require(find, "strategy not removed");
 
         _revokeRole(KEEPER_ROLE, address(strategy));
         delete _strategyInfoMap[strategy];
@@ -496,8 +528,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
 
             IBaseStrategy newPos = queue[i];
 
-            require(address(newPos) != address(0), "Cannot use to remove");
-            require(_strategyInfoMap[newPos].sharePercent > 0, "Cannot use to change strategies");
+            require(address(newPos) != address(0), ZeroAddress());
+            require(_strategyInfoMap[newPos].sharePercent > 0, StrategyNotExists(newPos));
         }
 
         _withdrawalQueue = queue;
@@ -530,7 +562,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
             totalSharePercent += _strategyInfoMap[currentStrategy].sharePercent;
         }
 
-        require(totalSharePercent - currentPercent + sharePercent <= MAX_PERCENT, "total share <= 100%");
+        require(totalSharePercent - currentPercent + sharePercent <= MAX_PERCENT, IncorrectMax());
 
         _strategyInfoMap[strategy].sharePercent = sharePercent;
 
@@ -572,10 +604,23 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:emits UpdateManagementRecipient
      */
     function setFeeRecipient(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(recipient != address(0), "zero address");
+        require(recipient != address(0), ZeroAddress());
         _feeRecipient = recipient;
 
         emit UpdateManagementRecipient(recipient);
+    }
+
+    /**
+     * @inheritdoc IVault
+     * @custom:modifier onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
+     * @custom:requires emergencyBackupAddress must not be zero address
+     * @custom:emits UpdateEmergencyBackupAddress
+     */
+    function setEmergencyBackupAddress(address backupAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(backupAddress != address(0), ZeroAddress());
+        _emergencyBackupAddress = backupAddress;
+
+        emit UpdateEmergencyBackupAddress(backupAddress);
     }
 
     /**
@@ -587,6 +632,8 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     function emergencyWithdraw(IBaseStrategy strategy) public onlyRole(EMERGENCY_ADMIN_ROLE) returns (uint256 amount) {
         _strategyInfoMap[strategy].balance = 0;
         amount = strategy.emergencyWithdraw();
+
+        SafeERC20.safeTransfer(IERC20(asset()), _emergencyBackupAddress, amount);
     }
 
     /**
@@ -604,7 +651,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
      * @custom:requires Strategy must be paused
      */
     function unpause(IBaseStrategy strategy) external onlyRole(PAUSER_ROLE) {
-        require(strategy.isPaused(), "not paused");
+        require(strategy.isPaused(), NotPaused(strategy));
         strategy.unpause();
     }
 
@@ -690,6 +737,14 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
     }
 
     /**
+     * @notice Gets emergency backup address
+     * @return emergency backup address
+     */
+    function emergencyBackupAddress() external view returns (address) {
+        return _emergencyBackupAddress;
+    }
+
+    /**
      * @inheritdoc ERC4626
      * @dev Includes balance in vault itself and all active strategies
      */
@@ -702,7 +757,9 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
                 break;
             }
 
-            if (strategy.isPaused()) {
+            try strategy.isPaused() returns (bool isPaused) {
+                if (isPaused) continue;
+            } catch {
                 continue;
             }
 

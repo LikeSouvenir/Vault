@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.20;
 
-import {BaseStrategy} from "../BaseStrategy.sol";
+import {BaseStrategy, IBaseStrategy} from "../BaseStrategy.sol";
 import {IComet, ICometRewards} from "../interfaces/IComet.sol";
 import {IUniswapV2Router} from "../interfaces/IUniswapV2Router.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -46,10 +46,10 @@ contract CompoundUsdcStrategy is BaseStrategy {
         address rewardToken_,
         address uniswapRouter_
     ) BaseStrategy(token_, name_, vault_) {
-        require(comet_ != address(0), "zero comet address");
-        require(cometRewards_ != address(0), "zero comet rewards address");
-        require(rewardToken_ != address(0), "zero reward token address");
-        require(uniswapRouter_ != address(0), "zero uniswap router");
+        require(comet_ != address(0), ZeroAddress());
+        require(cometRewards_ != address(0), ZeroAddress());
+        require(rewardToken_ != address(0), ZeroAddress());
+        require(uniswapRouter_ != address(0), ZeroAddress());
 
         comet = IComet(comet_);
         cometReward = ICometRewards(cometRewards_);
@@ -57,7 +57,7 @@ contract CompoundUsdcStrategy is BaseStrategy {
         uniswapRouter = uniswapRouter_;
 
         address token = comet.baseToken();
-        require(token == token_, "invalid token");
+        require(token == token_, InsufficientAssetsToken());
 
         IERC20(token_).forceApprove(comet_, type(uint256).max);
         IERC20(rewardToken_).forceApprove(uniswapRouter_, type(uint256).max);
@@ -92,7 +92,7 @@ contract CompoundUsdcStrategy is BaseStrategy {
      */
 
     function _push(uint256 _amount) internal virtual override {
-        require(_asset.approve(address(comet), _amount), "approve failed");
+        _asset.forceApprove(address(comet), _amount);
         comet.supply(address(_asset), _amount);
     }
 

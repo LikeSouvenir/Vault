@@ -30,6 +30,29 @@ uint256 constant DEFAULT_USER_BALANCE = 10_000e18;
 uint256 constant TEST_INVEST_VALUE = 100_000;
 uint16 constant TEST_STRATEGY_SHARE_PERCENT = 1_000;
 
+contract   UnsupportedInterfaceBaseStrategy is BaseStrategyWrapper {
+    constructor(address investTo_, IERC20 assetToken_, string memory name_, address vault_)
+        BaseStrategyWrapper(investTo_, assetToken_, name_, vault_)
+    {}
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return false;
+    }
+}
+
+contract RevertIsPausedFuncBaseStrategy is BaseStrategyWrapper {
+    constructor(address investTo_, IERC20 assetToken_, string memory name_, address vault_)
+    BaseStrategyWrapper(investTo_, assetToken_, name_, vault_)
+    {}
+    bool internal lock;
+    function setLock() external {
+        lock = true;
+    }
+    function isPaused() external view override returns (bool) {
+        if (lock) revert();
+        return false;
+    }
+}
+
 contract VaultTest is Test {
     /*
     - Добавить invariant тесты
@@ -45,6 +68,7 @@ contract VaultTest is Test {
     Vault internal vault;
     BaseStrategyWrapper internal strategyOne;
     BaseStrategyWrapper internal strategyTwo;
+      UnsupportedInterfaceBaseStrategy internal badStrategyContract;
 
     address internal manager = address(1);
     address internal keeper = address(2);
@@ -57,11 +81,14 @@ contract VaultTest is Test {
     function setUp() public {
         erc20Mock = new Erc20Mock();
         stackingMock = new StackingMock(erc20Mock);
-        vault = new Vault(erc20Mock, "vaultShare", "VS", manager, feeRecipient);
+        vault = new Vault(erc20Mock, "vaultShare", "VS", manager, feeRecipient, manager);
 
         strategyOne = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
         strategyTwo = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
 
+        badStrategyContract = new   UnsupportedInterfaceBaseStrategy(
+            address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault)
+        );
         erc20Mock.mint(user1, DEFAULT_USER_BALANCE);
         erc20Mock.mint(user2, DEFAULT_USER_BALANCE);
         erc20Mock.mint(user3, DEFAULT_USER_BALANCE);
@@ -69,6 +96,8 @@ contract VaultTest is Test {
         vm.prank(manager);
         vault.grantRole(KEEPER_ROLE, keeper);
     }
+
+    event UpdateEmergencyBackupAddress(address indexed backupAddress);
 
     event UpdateManagementRecipient(address indexed recipient);
 
@@ -140,14 +169,17 @@ contract VaultTest is Test {
     }
 
     function test_constructorZeroAddresses() external {
-        vm.expectRevert("assetToken zero address");
-        new Vault(IERC20(address(0)), "test", "TST", manager, feeRecipient);
+        vm.expectRevert(abi.encodeWithSelector(IVault.ZeroAddress.selector));
+        new Vault(IERC20(address(0)), "test", "TST", manager, feeRecipient, manager);
 
-        vm.expectRevert("manager zero address");
-        new Vault(erc20Mock, "test", "TST", address(0), feeRecipient);
+        vm.expectRevert(abi.encodeWithSelector(IVault.ZeroAddress.selector));
+        new Vault(erc20Mock, "test", "TST", address(0), feeRecipient, manager);
 
-        vm.expectRevert("feeRecipient zero address");
-        new Vault(erc20Mock, "test", "TST", manager, address(0));
+        vm.expectRevert(abi.encodeWithSelector(IVault.ZeroAddress.selector));
+        new Vault(erc20Mock, "test", "TST", manager, address(0), manager);
+
+        vm.expectRevert(abi.encodeWithSelector(IVault.ZeroAddress.selector));
+        new Vault(erc20Mock, "test", "TST", manager, feeRecipient, address(0));
     }
 
     function test_withManagementFeeReport() external {
@@ -265,7 +297,7 @@ contract VaultTest is Test {
         stackingMock.updateInvest(address(strategyOne));
 
         vm.prank(keeper);
-        (uint256 profit, uint256 loss, uint256 balance) = vault.report(strategyOne);
+        (uint256 profit, uint256 loss,) = vault.report(strategyOne);
 
         vm.assertEq(profit, 0, "should have 0");
         vm.assertEq(loss, expectLoss, "should report correct loss");
@@ -279,14 +311,13 @@ contract VaultTest is Test {
         vault.setManagementFee(5000); // 50%
         vm.stopPrank();
 
-        uint256 expectProfit = stackingMock.calculateLoss(TEST_INVEST_VALUE);
         uint256 smallProfit = TEST_INVEST_VALUE / 10;
         stackingMock.updateInvest(address(strategyOne));
 
         skip(365 days);
 
         vm.prank(keeper);
-        (uint256 profit, uint256 loss, uint256 balance) = vault.report(strategyOne);
+        (uint256 profit, uint256 loss,) = vault.report(strategyOne);
 
         vm.assertEq(loss, 0, "should have 0 loss");
         vm.assertEq(profit, smallProfit, "should have small profit");
@@ -341,8 +372,8 @@ contract VaultTest is Test {
 
         uint256 balanceVaultBefore = erc20Mock.balanceOf(address(vault));
         uint256 balanceStackingBefore = stackingMock.getBalance(address(strategyOne));
-        vm.assertEq(balanceVaultBefore, 0);
-        vm.assertEq(balanceStackingBefore, TEST_INVEST_VALUE);
+        vm.assertEq(balanceVaultBefore, 0, "balance before must be 0");
+        vm.assertEq(balanceStackingBefore, TEST_INVEST_VALUE, "balance before must be great than 0");
 
         vm.assertFalse(strategyOne.isPaused());
 
@@ -350,11 +381,11 @@ contract VaultTest is Test {
         vault.grantRole(vault.EMERGENCY_ADMIN_ROLE(), manager);
         vault.emergencyWithdraw(strategyOne);
 
-        uint256 balanceVaultAfterEmergency = erc20Mock.balanceOf(address(vault));
+        uint256 balanceVaultAfterEmergency = erc20Mock.balanceOf(vault.emergencyBackupAddress());
         uint256 balanceStackingAfter = stackingMock.getBalance(address(strategyOne));
 
-        vm.assertEq(balanceStackingAfter, 0);
-        vm.assertEq(balanceVaultAfterEmergency, TEST_INVEST_VALUE + profit);
+        vm.assertEq(balanceStackingAfter, 0, "balance after must be 0");
+        vm.assertEq(balanceVaultAfterEmergency, TEST_INVEST_VALUE + profit, "balance after must be great than 0");
     }
 
     function test_whenPausedEmergencyWithdraw() external {
@@ -386,7 +417,7 @@ contract VaultTest is Test {
         vault.emergencyWithdraw(strategyOne);
 
         uint256 balanceStrategyAfterEmergency = erc20Mock.balanceOf(address(strategyOne));
-        uint256 balanceVaultAfterEmergency = erc20Mock.balanceOf(address(vault));
+        uint256 balanceVaultAfterEmergency = erc20Mock.balanceOf(vault.emergencyBackupAddress());
 
         vm.assertEq(balanceStrategyAfterEmergency, 0);
         vm.assertEq(balanceVaultAfterEmergency, TEST_INVEST_VALUE + profit);
@@ -397,7 +428,7 @@ contract VaultTest is Test {
         vault.add(strategyOne, MAX_PERCENT / 2);
         vault.add(strategyTwo, MAX_PERCENT / 2);
 
-        vm.expectRevert(bytes("total share <= 100%"));
+        vm.expectRevert(IVault.IncorrectMax.selector);
         vault.setSharePercent(strategyOne, (MAX_PERCENT / 2) + 1);
     }
 
@@ -507,7 +538,7 @@ contract VaultTest is Test {
 
     function test_notExistsRemove() external {
         vm.startPrank(manager);
-        vm.expectRevert(bytes("strategy not exist"));
+        vm.expectRevert(abi.encodeWithSelector(IVault.StrategyNotExists.selector, strategyOne));
         vault.remove(strategyOne);
     }
 
@@ -516,20 +547,17 @@ contract VaultTest is Test {
         vault.add(strategyOne, TEST_STRATEGY_SHARE_PERCENT);
     }
 
-    function test_withoutAllowanceAdd() external {
-        vm.prank(address(strategyOne));
-        erc20Mock.approve(address(vault), 0);
-
+    function test_addUnsupportedIBaseStrategyInterface() external {
         vm.startPrank(manager);
-        vm.expectRevert(bytes("must allowance type(uint256).max"));
-        vault.add(strategyOne, TEST_STRATEGY_SHARE_PERCENT);
+        vm.expectRevert(IVault.UnsupportedIBaseStrategy.selector);
+        vault.add(badStrategyContract, TEST_STRATEGY_SHARE_PERCENT);
     }
 
     function test_sameStrategyAdd() external {
         vm.startPrank(manager);
         vault.add(strategyOne, TEST_STRATEGY_SHARE_PERCENT);
 
-        vm.expectRevert(bytes("strategy exist"));
+        vm.expectRevert(abi.encodeWithSelector(IVault.StrategyExists.selector, strategyOne));
         vault.add(strategyOne, TEST_STRATEGY_SHARE_PERCENT);
     }
 
@@ -541,18 +569,18 @@ contract VaultTest is Test {
             vault.add(strategy, TEST_STRATEGY_SHARE_PERCENT / uint16(MAXIMUM_STRATEGIES));
         }
 
-        vm.expectRevert(bytes("limited of strategy"));
+        vm.expectRevert(abi.encodeWithSelector(IVault.OutOfLimitStrategies.selector));
         vault.add(strategyOne, TEST_STRATEGY_SHARE_PERCENT);
     }
 
     function test_otherVaultInAdd() external {
-        Vault otherVault = new Vault(erc20Mock, "", "", manager, feeRecipient);
+        Vault otherVault = new Vault(erc20Mock, "", "", manager, feeRecipient, manager);
 
         IBaseStrategy strategy =
             new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(otherVault));
 
         vm.startPrank(manager);
-        vm.expectRevert(bytes("bad strategy vault in"));
+        vm.expectRevert(abi.encodeWithSelector(IVault.InvalidVault.selector, strategy));
         vault.add(strategy, TEST_STRATEGY_SHARE_PERCENT);
     }
 
@@ -698,7 +726,7 @@ contract VaultTest is Test {
             new BaseStrategyWrapper(address(stackingMock), otherErc20, "BaseStrategyWrapper", address(vault));
 
         vm.startPrank(manager);
-        vm.expectRevert(bytes("bad strategy asset in"));
+        vm.expectRevert(abi.encodeWithSelector(IVault.InvalidAssetToken.selector, strategy));
         vault.add(strategy, TEST_STRATEGY_SHARE_PERCENT);
     }
 
@@ -724,6 +752,27 @@ contract VaultTest is Test {
         vm.startPrank(user1);
         totalAssets = vault.maxWithdraw(user1);
         vm.assertEq(totalAssets, TEST_INVEST_VALUE);
+    }
+    function test_totalAssetsWithIncorrectPauseFunc() external {
+        vm.startPrank(manager);
+        RevertIsPausedFuncBaseStrategy badContract = new RevertIsPausedFuncBaseStrategy(
+            address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault)
+        );
+        vault.add(badContract, MAX_PERCENT);
+        vault.grantRole(PAUSER_ROLE, keeper);
+        vm.stopPrank();
+
+        _depositFrom(user1);
+        vm.prank(keeper);
+        vault.rebalance(badContract);
+
+        badContract.setLock(); // изменят isPaused на revert
+
+        vm.startPrank(keeper);
+        vault.pause(strategyOne);
+
+        uint totalAssets = vault.totalAssets();
+        vm.assertEq(totalAssets, 0);
     }
 
     function test_totalAssetsWithPausedStrategy() external {
@@ -777,9 +826,19 @@ contract VaultTest is Test {
         vault.pause(strategyOne);
         vm.assertTrue(strategyOne.isPaused());
 
-        vm.expectRevert(bytes("is paused"));
+        vm.expectRevert(abi.encodeWithSelector(IVault.IsPaused.selector, strategyOne));
         vault.pause(strategyOne);
         vm.assertTrue(strategyOne.isPaused());
+    }
+
+    function test_unpauseWhenNotPaused() external {
+        _setUpWithStrategyOne();
+        vault.grantRole(PAUSER_ROLE, keeper);
+        vm.stopPrank();
+
+        vm.startPrank(keeper);
+        vm.expectRevert(abi.encodeWithSelector(IVault.NotPaused.selector, strategyOne));
+        vault.unpause(strategyOne);
     }
 
     function test_unpause() external {
@@ -793,6 +852,23 @@ contract VaultTest is Test {
 
         vault.unpause(strategyOne);
         vm.assertFalse(strategyOne.isPaused());
+    }
+
+    function test_setEmergencyBackupAddress() external{
+        _setUpWithStrategyOne();
+        address backupAddress = vm.addr(992);
+
+        vm.expectEmit(false, false, false, true);
+        emit UpdateEmergencyBackupAddress(backupAddress);
+
+        vm.startPrank(manager);
+        vault.setEmergencyBackupAddress(backupAddress);
+    }
+
+    function test_setEmergencyBackupAddressWithZeroAddress() external{
+        vm.expectRevert(IVault.ZeroAddress.selector);
+        vm.startPrank(manager);
+        vault.setEmergencyBackupAddress(address(0));
     }
 
     function test_setPerformanceFee() external {
@@ -809,7 +885,7 @@ contract VaultTest is Test {
         _setUpWithStrategyOne();
 
         uint16 newFee = 10_001;
-        vm.expectRevert(bytes("max % is 100"));
+        vm.expectRevert(IVault.IncorrectMax.selector);
         vault.setPerformanceFee(strategyOne, newFee);
     }
 
@@ -817,7 +893,7 @@ contract VaultTest is Test {
         _setUpWithStrategyOne();
 
         uint16 newFee = 0;
-        vm.expectRevert(bytes("min % is 0,01"));
+        vm.expectRevert(IVault.IncorrectMin.selector);
         vault.setPerformanceFee(strategyOne, newFee);
     }
 
@@ -835,7 +911,7 @@ contract VaultTest is Test {
         _setUpWithStrategyOne();
 
         uint16 newFee = 10_001;
-        vm.expectRevert(bytes("max % is 100"));
+        vm.expectRevert(IVault.IncorrectMax.selector);
         vault.setManagementFee(newFee);
     }
 
@@ -843,7 +919,7 @@ contract VaultTest is Test {
         _setUpWithStrategyOne();
 
         uint16 newFee = 0;
-        vm.expectRevert(bytes("min % is 0,01"));
+        vm.expectRevert(IVault.IncorrectMin.selector);
         vault.setManagementFee(newFee);
     }
 
@@ -858,7 +934,7 @@ contract VaultTest is Test {
 
     function test_zeroAddressSetFeeRecipient() external {
         _setUpWithStrategyOne();
-        vm.expectRevert(bytes("zero address"));
+        vm.expectRevert(IVault.ZeroAddress.selector);
         vault.setFeeRecipient(address(0));
     }
 
@@ -876,7 +952,7 @@ contract VaultTest is Test {
         IBaseStrategy[MAXIMUM_STRATEGIES] memory newQueue;
         newQueue[0] = IBaseStrategy(address(0));
 
-        vm.expectRevert(bytes("Cannot use to remove"));
+        vm.expectRevert(IVault.ZeroAddress.selector);
         vault.setWithdrawalQueue(newQueue);
     }
 
@@ -909,7 +985,7 @@ contract VaultTest is Test {
             new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
         newWithdrawalQueue[1] = strategyOne;
 
-        vm.expectRevert(bytes("Cannot use to change strategies"));
+        vm.expectRevert(abi.encodeWithSelector(IVault.StrategyNotExists.selector, address(newWithdrawalQueue[0])));
         vault.setWithdrawalQueue(newWithdrawalQueue);
     }
 

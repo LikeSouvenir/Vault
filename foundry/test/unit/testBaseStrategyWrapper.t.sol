@@ -58,15 +58,16 @@ contract BaseStrategyWrapperTest is Test {
         vm.assertTrue(
             strategyWrapper.supportsInterface(baseStrategyInterface), "should support IBaseStrategy interface"
         );
+        vm.assertFalse(strategyWrapper.supportsInterface(randomInterface), "should support IBaseStrategy interface");
     }
 
     function test_Constructor_ZeroAssetToken() external {
-        vm.expectRevert(bytes("assetToken zero address"));
+        vm.expectRevert(IBaseStrategy.ZeroAddress.selector);
         new BaseStrategyWrapper(address(stackingMock), IERC20(address(0)), "Test", address(vaultMock));
     }
 
     function test_Constructor_ZeroVault() external {
-        vm.expectRevert(bytes("vault zero address"));
+        vm.expectRevert(IBaseStrategy.ZeroAddress.selector);
         new BaseStrategyWrapper(address(stackingMock), erc20Mock, "Test", address(0));
     }
 
@@ -192,7 +193,7 @@ contract BaseStrategyWrapperTest is Test {
         _strategyPushAmountFromVault(DEPOSIT_VALUE);
 
         vm.prank(address(vaultMock));
-        vm.expectRevert(bytes("insufficient assets"));
+        vm.expectRevert(IBaseStrategy.InsufficientAssetsToken.selector);
         strategyWrapper.pull(DEPOSIT_VALUE + 1);
     }
 
@@ -310,6 +311,15 @@ contract BaseStrategyWrapperTest is Test {
     }
 
     function test_unpause() external {
+        _strategyPushAmountFromVault(DEPOSIT_VALUE);
+        stackingMock.updateInvest(address(strategyWrapper));
+
+        vm.startPrank(address(vaultMock));
+        strategyWrapper.pause();
+        strategyWrapper.unpause();
+    }
+
+    function test_unpauseWithZeroBalance() external {
         vm.startPrank(address(vaultMock));
         strategyWrapper.pause();
         strategyWrapper.unpause();

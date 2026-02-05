@@ -44,7 +44,7 @@ contract testForkVault is Test {
     function setUp() public {
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
 
-        vault = new Vault(USDC, "vaultShare", "VS", manager, feeRecipient);
+        vault = new Vault(USDC, "vaultShare", "VS", manager, feeRecipient, manager);
 
         require(address(COMET_USDC).code.length > 0, "Comet haven't code");
         require(IComet(COMET_USDC).balanceOf(address(this)) != type(uint256).max, "Comet unsupported WETH");
@@ -114,12 +114,6 @@ contract testForkVault is Test {
         vm.assertEq(loss, 0);
         vm.assertGt(profit, 0);
         vm.assertGt(balance, balanceUsdcBefore);
-
-        uint256 balanceUsdcAfter = vault.strategyBalance(compoundV3);
-
-        console.log("balance", balance);
-        console.log("balanceUsdcBefore", balanceUsdcBefore);
-        console.log("balanceUsdcAfter", balanceUsdcAfter);
     }
 
     function testUniswapInteraction() public {

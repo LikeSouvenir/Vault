@@ -12,6 +12,92 @@ uint256 constant MAXIMUM_STRATEGIES = 20;
  * @notice IERC-4626 compliant vault with strategy management capabilities
  */
 interface IVault is IERC4626, IERC165 {
+    error ZeroAddress();
+    error UnsupportedIBaseStrategy();
+    error IncorrectMin();
+    error IncorrectMax();
+    error InvalidAssetToken(IBaseStrategy strategy);
+    error InvalidVault(IBaseStrategy strategy);
+    error IsPaused(IBaseStrategy strategy);
+    error NotPaused(IBaseStrategy strategy);
+    error OutOfLimitStrategies();
+    error StrategyExists(IBaseStrategy strategy);
+    error StrategyNotExists(IBaseStrategy strategy);
+
+    /**
+     * @notice Event emitted when strategy is added
+     * @param strategy Address of the strategy
+     */
+    event StrategyAdded(address indexed strategy);
+
+    /**
+     * @notice Event emitted when strategy is migrated
+     * @param oldVersion Address of the old strategy
+     * @param newVersion Address of the new strategy
+     */
+    event StrategyMigrated(address indexed oldVersion, address indexed newVersion);
+
+    /**
+     * @notice Event emitted when strategy is removed
+     * @param strategy Address of the strategy
+     * @param totalAssets Amount of assets withdrawn
+     */
+    event StrategyRemoved(address indexed strategy, uint256 totalAssets);
+
+    /**
+     * @notice Event emitted when withdrawal queue is updated
+     * @param queue New withdrawal queue
+     */
+    event UpdateWithdrawalQueue(IBaseStrategy[MAXIMUM_STRATEGIES] queue);
+
+    /**
+     * @notice Event emitted when strategy share percentage is updated
+     * @param strategy Address of the strategy
+     * @param newPercent New allocation percentage
+     */
+    event UpdateStrategySharePercent(address indexed strategy, uint256 newPercent);
+
+    /**
+     * @notice Event emitted when strategy performance fee is updated
+     * @param strategy Address of the strategy
+     * @param newFee New performance fee
+     */
+    event UpdatePerformanceFee(address indexed strategy, uint16 indexed newFee);
+
+    /**
+     * @notice Event emitted when management fee is updated
+     * @param fee New management fee
+     */
+    event UpdateManagementFee(uint16 indexed fee);
+
+    /**
+     * @notice Event emitted when fee recipient is updated
+     * @param recipient New fee recipient address
+     */
+    event UpdateManagementRecipient(address indexed recipient);
+
+    /**
+     * @notice Event emitted when fee emergencyBackupAddress is updated
+     * @param backupAddress New emergency backup address
+     */
+    event UpdateEmergencyBackupAddress(address indexed backupAddress);
+
+    /**
+     * @notice Event emitted when strategy info is updated
+     * @param strategy Strategy address
+     * @param newBalance New strategy balance
+     */
+    event UpdateStrategyInfo(IBaseStrategy indexed strategy, uint256 newBalance);
+
+    /**
+     * @notice Event emitted when strategy report is generated
+     * @param profit Profit amount
+     * @param loss Loss amount
+     * @param managementFees Management fees charged
+     * @param performanceFees Performance fees charged
+     */
+    event Reported(uint256 profit, uint256 loss, uint256 managementFees, uint256 performanceFees);
+
     /**
      * @notice Adds a new strategy to the vault
      * @param newStrategy Address of the new strategy
@@ -81,6 +167,12 @@ interface IVault is IERC4626, IERC165 {
     function setFeeRecipient(address recipient) external;
 
     /**
+     * @notice Sets emergency backup address
+     * @param backupAddress New backup address
+     */
+    function setEmergencyBackupAddress(address backupAddress) external;
+
+    /**
      * @notice Emergency withdraw from strategy (admin only)
      * @param strategy Strategy for emergency withdrawal
      * @return amount Amount of assets withdrawn
@@ -141,6 +233,12 @@ interface IVault is IERC4626, IERC165 {
     function feeRecipient() external view returns (address);
 
     /**
+     * @notice Gets emergency backup address
+     * @return emergency backup address
+     */
+    function emergencyBackupAddress() external view returns (address);
+
+    /**
      * @notice Gets strategy balance
      * @param strategy Strategy
      * @return Strategy balance in the vault
@@ -173,72 +271,4 @@ interface IVault is IERC4626, IERC165 {
      * @return Total amount of assets
      */
     function totalAssets() external view override returns (uint256);
-
-    /**
-     * @notice Event emitted when strategy is added
-     * @param strategy Address of the strategy
-     */
-    event StrategyAdded(address indexed strategy);
-
-    /**
-     * @notice Event emitted when strategy is migrated
-     * @param oldVersion Address of the old strategy
-     * @param newVersion Address of the new strategy
-     */
-    event StrategyMigrated(address indexed oldVersion, address indexed newVersion);
-
-    /**
-     * @notice Event emitted when strategy is removed
-     * @param strategy Address of the strategy
-     * @param totalAssets Amount of assets withdrawn
-     */
-    event StrategyRemoved(address indexed strategy, uint256 totalAssets);
-
-    /**
-     * @notice Event emitted when withdrawal queue is updated
-     * @param queue New withdrawal queue
-     */
-    event UpdateWithdrawalQueue(IBaseStrategy[MAXIMUM_STRATEGIES] queue);
-
-    /**
-     * @notice Event emitted when strategy share percentage is updated
-     * @param strategy Address of the strategy
-     * @param newPercent New allocation percentage
-     */
-    event UpdateStrategySharePercent(address indexed strategy, uint256 newPercent);
-
-    /**
-     * @notice Event emitted when strategy performance fee is updated
-     * @param strategy Address of the strategy
-     * @param newFee New performance fee
-     */
-    event UpdatePerformanceFee(address indexed strategy, uint16 indexed newFee);
-
-    /**
-     * @notice Event emitted when management fee is updated
-     * @param fee New management fee
-     */
-    event UpdateManagementFee(uint16 indexed fee);
-
-    /**
-     * @notice Event emitted when fee recipient is updated
-     * @param recipient New fee recipient address
-     */
-    event UpdateManagementRecipient(address indexed recipient);
-
-    /**
-     * @notice Event emitted when strategy info is updated
-     * @param strategy Strategy address
-     * @param newBalance New strategy balance
-     */
-    event UpdateStrategyInfo(IBaseStrategy indexed strategy, uint256 newBalance);
-
-    /**
-     * @notice Event emitted when strategy report is generated
-     * @param profit Profit amount
-     * @param loss Loss amount
-     * @param managementFees Management fees charged
-     * @param performanceFees Performance fees charged
-     */
-    event Reported(uint256 profit, uint256 loss, uint256 managementFees, uint256 performanceFees);
 }

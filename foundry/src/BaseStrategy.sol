@@ -38,8 +38,8 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:requires vault_ must not be zero address
      */
     constructor(address assetToken_, string memory name_, address vault_) {
-        require(assetToken_ != address(0), "assetToken zero address");
-        require(vault_ != address(0), "vault zero address");
+        require(assetToken_ != address(0), ZeroAddress());
+        require(vault_ != address(0), ZeroAddress());
 
         _asset = IERC20(assetToken_);
         _vault = vault_;
@@ -117,7 +117,7 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:emits Pull
      */
     function pull(uint256 amount) external virtual onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant returns (uint256 value) {
-        require(amount <= _lastTotalAssets, "insufficient assets");
+        require(amount <= _lastTotalAssets, InsufficientAssetsToken());
 
         _lastTotalAssets -= amount;
         value = _pull(amount);
@@ -195,7 +195,7 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
     function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
         _isPaused = true;
         uint256 assetAmount = _harvestAndReport();
-        _pull(assetAmount);
+        if (assetAmount > 0) _pull(assetAmount);
 
         emit StrategyPaused(block.timestamp);
     }
@@ -206,8 +206,9 @@ abstract contract BaseStrategy is IBaseStrategy, ReentrancyGuard, AccessControl 
      * @custom:emits StrategyUnpaused
      */
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = _asset.balanceOf(address(this));
+        if (balance > 0) _push(balance);
         _isPaused = false;
-        _push(_asset.balanceOf(address(this)));
 
         emit StrategyUnpaused(block.timestamp);
     }

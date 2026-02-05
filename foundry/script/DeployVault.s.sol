@@ -18,7 +18,8 @@ contract DeployVault is Script, Config {
 
         vm.startBroadcast();
 
-        IVault vault = new Vault(IERC20(weth), "Vault Share Token", "VST", defaultManager, defaultFeeRecipient);
+        IVault vault =
+            new Vault(IERC20(weth), "Vault Share Token", "VST", defaultManager, defaultFeeRecipient, defaultManager);
 
         vm.stopBroadcast();
 

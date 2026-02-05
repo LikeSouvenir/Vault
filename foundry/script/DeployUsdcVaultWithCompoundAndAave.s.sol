@@ -6,13 +6,10 @@ import {Config} from "forge-std/Config.sol";
 import {console} from "forge-std/console.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IVault} from "../src/interfaces/IVault.sol";
 import {Vault} from "../src/Vault.sol";
 import {IBaseStrategy} from "../src/interfaces/IBaseStrategy.sol";
 import {CompoundUsdcStrategy} from "../src/StrategyExamples/CompoundUsdcStrategy.sol";
 import {AaveUsdcStrategy} from "../src/StrategyExamples/AaveUsdcStrategy.sol";
-
-import "forge-std/Test.sol";
 
 uint16 constant DEFAULT_SHARE_PERCENT = 5_000;
 
@@ -40,7 +37,8 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         vm.startBroadcast();
 
         // Vault
-        Vault vault = new Vault(IERC20(usdc), "Vault Share Token", "VST", defaultManager, defaultFeeRecipient);
+        Vault vault =
+            new Vault(IERC20(usdc), "Vault Share Token", "VST", defaultManager, defaultFeeRecipient, defaultManager);
 
         // Compound strategy
         IBaseStrategy compoundV3 = new CompoundUsdcStrategy(

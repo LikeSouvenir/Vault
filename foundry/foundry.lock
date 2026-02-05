@@ -1,4 +1,7 @@
 {
+  "lib/comet": {
+    "rev": "ed6ebcd84ac00906e8e725716891d482f4bef8b9"
+  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.12.0",
@@ -10,5 +13,23 @@
       "name": "v5.0.1",
       "rev": "01ef448981be9d20ca85f2faf6ebdf591ce409f3"
     }
+  },
+  "lib/permit2": {
+    "rev": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+  },
+  "lib/universal-router": {
+    "tag": {
+      "name": "v1.6.0",
+      "rev": "41183d6eb154f0ab0e74a0e911a5ef9ea51fc4bd"
+    }
+  },
+  "lib/v4-core": {
+    "tag": {
+      "name": "v4.0.0",
+      "rev": "e50237c43811bd9b526eff40f26772152a42daba"
+    }
+  },
+  "lib/v4-periphery": {
+    "rev": "3779387e5d296f39df543d23524b050f89a62917"
   }
 }
