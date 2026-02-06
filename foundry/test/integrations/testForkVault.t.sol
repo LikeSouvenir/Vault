@@ -9,7 +9,7 @@ import {IComet} from "../../src/interfaces/IComet.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
 uint16 constant DEFAULT_FEE = 100;
 uint16 constant MAX_PERCENT = 10_000;
@@ -28,6 +28,9 @@ address constant COMET_REWARDS = 0x1B0e765F6224C21223AeA2af16c1C46E38885a40;
 IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 IERC20 constant COMP = IERC20(0xc00e94Cb662C3520282E6f5717214004A7f26888);
+
+address constant COMP_USD = 0x69B50fF403E995d9c4441a303438D9049dAC8cCD;
+address constant AAVE_USD = 0xF02C1e2A3B77c1cacC72f72B44f7d0a4c62e4a85;
 
 address constant manager = 0x1C969b20A5985c02721FCa20c44F9bf8931856a8;
 address constant feeRecipient = 0x8A969F0C98ff14c5fa92d75aadE3f329141a3384;
@@ -56,7 +59,8 @@ contract testForkVault is Test {
             address(vault),
             COMET_REWARDS,
             address(COMP),
-            UNISWAP_V2_ROUTER
+            UNISWAP_V2_ROUTER,
+            COMP_USD
         );
         //         aave = new AaveUsdcStrategy.sol(address(stackingMock), address(WETH), "aaveStrategy", address(vault));
 
@@ -172,7 +176,8 @@ contract testForkVault is Test {
             address(vault),
             COMET_REWARDS,
             address(COMP),
-            UNISWAP_V2_ROUTER
+            UNISWAP_V2_ROUTER,
+            COMP_USD
         );
 
         vault.migrate(compoundV3, newCompoundV3);

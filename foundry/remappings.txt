@@ -1,5 +1,6 @@
 @comet-contracts/=lib/comet/contracts/
 @forge-std/=lib/comet/forge/lib/forge-std/
 @openzeppelin/=lib/openzeppelin-contracts/
+@foundry-chainlink-toolkit/=lib/foundry-chainlink-toolkit/
 
 

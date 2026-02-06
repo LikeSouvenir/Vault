@@ -8,6 +8,10 @@ comet_rewards = "0x1B0e765F6224C21223AeA2af16c1C46E38885a40"
 weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
 comp = "0xc00e94Cb662C3520282E6f5717214004A7f26888"
+comp_usd = "0x69B50fF403E995d9c4441a303438D9049dAC8cCD"
+aave_usd="0xF02C1e2A3B77c1cacC72f72B44f7d0a4c62e4a85"
+vault = ""
+
 
 [sepolia]
 endpoint_url = "${SEPOLIA_RPC_URL}"
@@ -19,6 +23,8 @@ comet_rewards = "0x8bF5b658bdF0388E8b482ED51B14aef58f90abfD"
 weth = "0x2D5ee574e710219a521449679A4A7f2B43f046ad"
 usdc = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 comp = "0xA6c8D1c55951e8AC44a0EaA959Be5Fd21cc07531"
+comp_usd = "" # отсутствует - https://docs.chain.link/data-feeds/price-feeds/
+aave_usd="" # отсутствует
 vault_usdc = "0xFceE4E60668953bEA862D2C85cfCe1f02A461099"
 compound_strategy_usdc = "0x341A2c85C499895331fa2977EB1908939676cE83"
 vault = "0x0a0F0f65e4fdB02941dC84d0c5648892A06A0FE6"

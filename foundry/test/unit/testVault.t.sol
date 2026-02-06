@@ -30,10 +30,11 @@ uint256 constant DEFAULT_USER_BALANCE = 10_000e18;
 uint256 constant TEST_INVEST_VALUE = 100_000;
 uint16 constant TEST_STRATEGY_SHARE_PERCENT = 1_000;
 
-contract   UnsupportedInterfaceBaseStrategy is BaseStrategyWrapper {
+contract UnsupportedInterfaceBaseStrategy is BaseStrategyWrapper {
     constructor(address investTo_, IERC20 assetToken_, string memory name_, address vault_)
         BaseStrategyWrapper(investTo_, assetToken_, name_, vault_)
     {}
+
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
         return false;
     }
@@ -41,12 +42,14 @@ contract   UnsupportedInterfaceBaseStrategy is BaseStrategyWrapper {
 
 contract RevertIsPausedFuncBaseStrategy is BaseStrategyWrapper {
     constructor(address investTo_, IERC20 assetToken_, string memory name_, address vault_)
-    BaseStrategyWrapper(investTo_, assetToken_, name_, vault_)
+        BaseStrategyWrapper(investTo_, assetToken_, name_, vault_)
     {}
     bool internal lock;
+
     function setLock() external {
         lock = true;
     }
+
     function isPaused() external view override returns (bool) {
         if (lock) revert();
         return false;
@@ -68,7 +71,7 @@ contract VaultTest is Test {
     Vault internal vault;
     BaseStrategyWrapper internal strategyOne;
     BaseStrategyWrapper internal strategyTwo;
-      UnsupportedInterfaceBaseStrategy internal badStrategyContract;
+    UnsupportedInterfaceBaseStrategy internal badStrategyContract;
 
     address internal manager = address(1);
     address internal keeper = address(2);
@@ -86,7 +89,7 @@ contract VaultTest is Test {
         strategyOne = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
         strategyTwo = new BaseStrategyWrapper(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
 
-        badStrategyContract = new   UnsupportedInterfaceBaseStrategy(
+        badStrategyContract = new UnsupportedInterfaceBaseStrategy(
             address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault)
         );
         erc20Mock.mint(user1, DEFAULT_USER_BALANCE);
@@ -753,11 +756,11 @@ contract VaultTest is Test {
         totalAssets = vault.maxWithdraw(user1);
         vm.assertEq(totalAssets, TEST_INVEST_VALUE);
     }
+
     function test_totalAssetsWithIncorrectPauseFunc() external {
         vm.startPrank(manager);
-        RevertIsPausedFuncBaseStrategy badContract = new RevertIsPausedFuncBaseStrategy(
-            address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault)
-        );
+        RevertIsPausedFuncBaseStrategy badContract =
+            new RevertIsPausedFuncBaseStrategy(address(stackingMock), erc20Mock, "BaseStrategyWrapper", address(vault));
         vault.add(badContract, MAX_PERCENT);
         vault.grantRole(PAUSER_ROLE, keeper);
         vm.stopPrank();
@@ -771,7 +774,7 @@ contract VaultTest is Test {
         vm.startPrank(keeper);
         vault.pause(strategyOne);
 
-        uint totalAssets = vault.totalAssets();
+        uint256 totalAssets = vault.totalAssets();
         vm.assertEq(totalAssets, 0);
     }
 
@@ -854,7 +857,7 @@ contract VaultTest is Test {
         vm.assertFalse(strategyOne.isPaused());
     }
 
-    function test_setEmergencyBackupAddress() external{
+    function test_setEmergencyBackupAddress() external {
         _setUpWithStrategyOne();
         address backupAddress = vm.addr(992);
 
@@ -865,7 +868,7 @@ contract VaultTest is Test {
         vault.setEmergencyBackupAddress(backupAddress);
     }
 
-    function test_setEmergencyBackupAddressWithZeroAddress() external{
+    function test_setEmergencyBackupAddressWithZeroAddress() external {
         vm.expectRevert(IVault.ZeroAddress.selector);
         vm.startPrank(manager);
         vault.setEmergencyBackupAddress(address(0));

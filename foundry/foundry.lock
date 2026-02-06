@@ -23,6 +23,12 @@
       "rev": "41183d6eb154f0ab0e74a0e911a5ef9ea51fc4bd"
     }
   },
+  "lib/v2-core": {
+    "tag": {
+      "name": "v1.0.1",
+      "rev": "4dd59067c76dea4a0e8e4bfdda41877a6b16dedc"
+    }
+  },
   "lib/v4-core": {
     "tag": {
       "name": "v4.0.0",

@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {Config} from "forge-std/Config.sol";
-import {console} from "forge-std/console.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vault} from "../src/Vault.sol";
@@ -11,7 +10,7 @@ import {IBaseStrategy} from "../src/interfaces/IBaseStrategy.sol";
 import {CompoundUsdcStrategy} from "../src/StrategyExamples/CompoundUsdcStrategy.sol";
 import {AaveUsdcStrategy} from "../src/StrategyExamples/AaveUsdcStrategy.sol";
 
-uint16 constant DEFAULT_SHARE_PERCENT = 5_000;
+uint16 constant DEFAULT_SHARE_PERCENT = 5_000; 
 
 contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
     function run() external returns (Vault) {
@@ -27,7 +26,8 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         address cometUsdc = config.get("comet_usdc").toAddress();
         address cometRewards = config.get("comet_rewards").toAddress();
         address comp = config.get("comp").toAddress();
-
+        address compUsd = config.get("comp_usd").toAddress();
+        address aaveUsd = config.get("aave_usd").toAddress();
         // Aave
         //        address aavePool = config.get("aave_v3_pool").toAddress();
         //        address aToken = config.get("aave_v3_usdc_aToken").toAddress();
@@ -42,7 +42,7 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
 
         // Compound strategy
         IBaseStrategy compoundV3 = new CompoundUsdcStrategy(
-            cometUsdc, usdc, "CompoundV3", address(vault), cometRewards, comp, uniswapV2Router
+            cometUsdc, usdc, "CompoundV3", address(vault), cometRewards, comp, uniswapV2Router, compUsd
         );
 
         // Aave strategy
@@ -54,7 +54,8 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         //            aToken,
         //            aaveRewardsController,
         //            aaveRewardToken,
-        //            uniswapV2Router
+        //            uniswapV2Router,
+        //            aaveUsd
         //        );
 
         // add strategies
@@ -65,8 +66,6 @@ contract DeployUsdcVaultWithCompoundAndAave is Script, Config {
         vault.grantRole(vault.KEEPER_ROLE(), defaultManager);
 
         vm.stopBroadcast();
-        console.log("defaultManager", defaultManager);
-        console.log("msg sender", msg.sender);
 
         // set addresses
         config.set("vault_usdc", address(vault));

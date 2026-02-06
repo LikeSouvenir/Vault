@@ -17,11 +17,12 @@ contract DeployAaveUsdcStrategy is Script, Config {
         address rewardsController = config.get("aave_v3_rewards_controller").toAddress();
         address usdc = config.get("usdc").toAddress();
         address rewardToken = config.get("aave_reward_token").toAddress(); // Обычно stkAAVE или другие
+        address aaveUsd = config.get("aave_usd").toAddress();
         address vault = config.get("vault").toAddress();
 
         vm.startBroadcast();
         IBaseStrategy strategy = new AaveUsdcStrategy(
-            aavePool, usdc, "AaveV3", vault, aToken, rewardsController, rewardToken, uniswapV2Router
+            aavePool, usdc, "AaveV3", vault, aToken, rewardsController, rewardToken, uniswapV2Router, aaveUsd
         );
 
         vm.stopBroadcast();

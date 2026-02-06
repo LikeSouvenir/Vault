@@ -257,10 +257,7 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
         }
 
         _strategyInfoMap[newStrategy] = StrategyInfo({
-            balance: 0,
-            lastTakeTime: uint96(block.timestamp),
-            sharePercent: 0,
-            performanceFee: DEFAULT_PERFORMANCE_FEE
+            balance: 0, lastTakeTime: uint96(block.timestamp), sharePercent: 0, performanceFee: DEFAULT_PERFORMANCE_FEE
         });
 
         setSharePercent(newStrategy, sharePercent);
@@ -785,8 +782,6 @@ contract Vault is IVault, ERC4626, AccessControl, ReentrancyGuard {
                 }
             }
         }
-
-        return total;
     }
 
     /**

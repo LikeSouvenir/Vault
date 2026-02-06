@@ -1,0 +1,26 @@
+{
+  "foundry/lib/comet": {
+    "rev": "ed6ebcd84ac00906e8e725716891d482f4bef8b9"
+  },
+  "foundry/lib/forge-std": {
+    "rev": "9aaeaf43602210beecf85137271a2f7c5c1f0975"
+  },
+  "foundry/lib/openzeppelin-contracts": {
+    "rev": "75973f63b5a84dd2fc998b5f329f1e254b0fdc77"
+  },
+  "foundry/lib/permit2": {
+    "rev": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219"
+  },
+  "foundry/lib/universal-router": {
+    "rev": "41183d6eb154f0ab0e74a0e911a5ef9ea51fc4bd"
+  },
+  "foundry/lib/v2-core": {
+    "rev": "4dd59067c76dea4a0e8e4bfdda41877a6b16dedc"
+  },
+  "foundry/lib/v4-core": {
+    "rev": "e50237c43811bd9b526eff40f26772152a42daba"
+  },
+  "foundry/lib/v4-periphery": {
+    "rev": "3779387e5d296f39df543d23524b050f89a62917"
+  }
+}
