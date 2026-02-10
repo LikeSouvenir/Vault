@@ -1,5 +1,5 @@
 # CompoundUsdcStrategy
-[Git Source](https://github.com/LikeSouvenir/Vault/blob/8ed516f562cdb60c3e34b4e86693fe2158400602/src/StrategyExamples/CompoundUsdcStrategy.sol)
+[Git Source](https://github.com/LikeSouvenir/Vault/blob/36fdd71da90fb692ff334a0a992d2c455d783bcd/src/StrategyExamples/CompoundUsdcStrategy.sol)
 
 **Inherits:**
 [BaseStrategy](/src/BaseStrategy.sol/abstract.BaseStrategy.md)
@@ -13,48 +13,98 @@ Earns interest on USDC deposits and collects COMP rewards, swapping them to USDC
 
 
 ## State Variables
-### comet
+### MAX_BPS
+
+```solidity
+uint16 private constant MAX_BPS = 10_000
+```
+
+
+### MIN_BPS
+
+```solidity
+uint16 private constant MIN_BPS = 1
+```
+
+
+### ADDRESS_AGGREGATOR_V3
+ADDRESS_AGGREGATOR_V3 chainlink
+
+
+```solidity
+address public immutable ADDRESS_AGGREGATOR_V3
+```
+
+
+### COMET
 Compound V3 Comet lending protocol contract
 
 
 ```solidity
-IComet private immutable comet
+IComet private immutable COMET
 ```
 
 
-### cometReward
+### COMET_REWARD
 Compound V3 Rewards contract for COMP distribution
 
 
 ```solidity
-ICometRewards public immutable cometReward
+ICometRewards public immutable COMET_REWARD
 ```
 
 
-### comp
-Address of the COMP reward token
-
-
-```solidity
-address public immutable comp
-```
-
-
-### uniswapRouter
+### UNISWAP_ROUTER
 Uniswap V2 Router for swapping COMP to USDC
 
 
 ```solidity
-address public immutable uniswapRouter
+address public immutable UNISWAP_ROUTER
+```
+
+
+### COMP
+Address of the COMP reward token
+
+
+```solidity
+address public immutable COMP
+```
+
+
+### updateMaxTime
+Max difference between AddressAggregatorV3.latestRoundData.updatedAt and now
+
+
+```solidity
+uint96 public updateMaxTime = 1 hours
 ```
 
 
 ### swapDeadline
-Deadline duration for Uniswap swaps (default: 1 hour)
+Deadline duration for Uniswap swaps, by default is 1 hour
 
 
 ```solidity
-uint256 public swapDeadline = 1 hours
+uint96 public swapDeadline = 1 hours
+```
+
+
+### slippageBps
+Slippage tolerance in basis points, by default is 0,5%
+
+
+```solidity
+uint16 public slippageBps = 50
+```
+
+
+### minSwapAmount
+Minimum swap amount in USDC to trigger swap, by default is 2000e18
+
+
+```solidity
+uint256 public minSwapAmount = 2000e18
 ```
 
 
@@ -74,7 +124,8 @@ constructor(
     address vault_,
     address cometRewards_,
     address rewardToken_,
-    address uniswapRouter_
+    address uniswapRouter_,
+    address addressAggregatorV3_
 ) BaseStrategy(token_, name_, vault_);
 ```
 **Parameters**
@@ -88,6 +139,7 @@ constructor(
 |`cometRewards_`|`address`|Address of Compound V3 Rewards contract|
 |`rewardToken_`|`address`|Address of the COMP reward token|
 |`uniswapRouter_`|`address`|Address of Uniswap V2 Router|
+|`addressAggregatorV3_`|`address`|Address of Chainlink AddressAggregatorV3|
 
 
 ### _pull
@@ -194,12 +246,116 @@ role: DEFAULT_ADMIN_ROLE Only callable by admin
 
 
 ```solidity
-function setSwapDeadline(uint256 delay) external onlyRole(DEFAULT_ADMIN_ROLE);
+function setSwapDeadline(uint96 newSwapDeadline) external onlyRole(DEFAULT_ADMIN_ROLE);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`delay`|`uint256`|New deadline duration in seconds|
+|`newSwapDeadline`|`uint96`|New deadline duration in seconds|
 
+
+### setUpdateMaxTime
+
+Updates the maximum time for price updates from aggregator
+
+Prevents using stale prices by ensuring updates occur within reasonable timeframes
+
+**Note:**
+role: DEFAULT_ADMIN_ROLE Only callable by admin
+
+
+```solidity
+function setUpdateMaxTime(uint96 newMaxTime) external onlyRole(DEFAULT_ADMIN_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newMaxTime`|`uint96`|New maximum update time in seconds|
+
+
+### setSlippageBps
+
+Updates the slippage tolerance for swaps, by default = 2000e18
+
+Prevents front-running and excessive price impact during COMP→USDC swaps
+
+**Note:**
+role: DEFAULT_ADMIN_ROLE Only callable by admin
+
+
+```solidity
+function setSlippageBps(uint16 newSlippageBps) external onlyRole(DEFAULT_ADMIN_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newSlippageBps`|`uint16`|New slippage tolerance in basis points (1-10000)|
+
+
+### setMinSwapAmount
+
+Updates the minimum COMP amount to trigger a swap
+
+Prevents wasteful gas spending on small reward swaps
+
+**Note:**
+role: DEFAULT_ADMIN_ROLE Only callable by admin
+
+
+```solidity
+function setMinSwapAmount(uint256 newMinAmount) external onlyRole(DEFAULT_ADMIN_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newMinAmount`|`uint256`|New minimum amount in USDC terms (18 decimals)|
+
+
+## Events
+### SlippageUpdated
+
+```solidity
+event SlippageUpdated(uint256 newSlippageBps);
+```
+
+### MinSwapAmountUpdated
+
+```solidity
+event MinSwapAmountUpdated(uint256 newMinAmount);
+```
+
+### SwapExecuted
+
+```solidity
+event SwapExecuted(uint256 amountIn, uint256 amountOut, uint256 minAmountOut);
+```
+
+## Errors
+### IncorrectMin
+
+```solidity
+error IncorrectMin();
+```
+
+### IncorrectMax
+
+```solidity
+error IncorrectMax();
+```
+
+### LessThanMinimumSwapAmount
+
+```solidity
+error LessThanMinimumSwapAmount(uint256 currentAmount);
+```
+
+### IncorrectMinTime
+
+```solidity
+error IncorrectMinTime();
+```
 

@@ -1,5 +1,5 @@
 # Vault
-[Git Source](https://github.com/LikeSouvenir/Vault/blob/8ed516f562cdb60c3e34b4e86693fe2158400602/src/Vault.sol)
+[Git Source](https://github.com/LikeSouvenir/Vault/blob/36fdd71da90fb692ff334a0a992d2c455d783bcd/src/Vault.sol)
 
 **Inherits:**
 [IVault](/src/interfaces/IVault.sol/interface.IVault.md), ERC4626, AccessControl, ReentrancyGuard
@@ -125,6 +125,15 @@ address private _feeRecipient
 ```
 
 
+### _emergencyBackupAddress
+The address to which the entire balance will be transferred when call 'emergencyExit'.
+
+
+```solidity
+address private _emergencyBackupAddress
+```
+
+
 ### _withdrawalQueue
 Withdrawal queue for strategies
 
@@ -164,7 +173,8 @@ constructor(
     string memory nameShare_,
     string memory symbolShare_,
     address manager_,
-    address feeRecipient_
+    address feeRecipient_,
+    address emergencyBackupAddress_
 ) ERC4626(assetToken_) ERC20(nameShare_, symbolShare_);
 ```
 **Parameters**
@@ -176,6 +186,7 @@ constructor(
 |`symbolShare_`|`string`|Symbol of the share token|
 |`manager_`|`address`|Manager (administrator) address|
 |`feeRecipient_`|`address`|Fee recipient address|
+|`emergencyBackupAddress_`|`address`||
 
 
 ### supportsInterface
@@ -341,6 +352,66 @@ function _notPaused(IBaseStrategy strategy) internal view;
 |`strategy`|`IBaseStrategy`|Strategy to check|
 
 
+### notExists
+
+Modifier to check notExists strategy status
+
+
+```solidity
+modifier notExists(IBaseStrategy strategy) ;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`strategy`|`IBaseStrategy`|Strategy to check|
+
+
+### _notExists
+
+Internal function to check notExists strategy status
+
+
+```solidity
+function _notExists(IBaseStrategy strategy) internal view;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`strategy`|`IBaseStrategy`|Strategy to check|
+
+
+### exists
+
+Modifier to check exists strategy status
+
+
+```solidity
+modifier exists(IBaseStrategy strategy) ;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`strategy`|`IBaseStrategy`|Strategy to check|
+
+
+### _exists
+
+Internal function to check exists strategy
+
+
+```solidity
+function _exists(IBaseStrategy strategy) internal view;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`strategy`|`IBaseStrategy`|Strategy to check|
+
+
 ### add
 
 Adds a new strategy to the vault
@@ -371,7 +442,8 @@ function add(IBaseStrategy newStrategy, uint16 sharePercent)
     onlyRole(DEFAULT_ADMIN_ROLE)
     supportIBaseStrategyInterface(IERC165(newStrategy))
     checkAsset(newStrategy)
-    checkVault(newStrategy);
+    checkVault(newStrategy)
+    notExists(newStrategy);
 ```
 **Parameters**
 
@@ -407,7 +479,9 @@ function migrate(IBaseStrategy oldStrategy, IBaseStrategy newStrategy)
     onlyRole(DEFAULT_ADMIN_ROLE)
     supportIBaseStrategyInterface(IERC165(newStrategy))
     checkAsset(newStrategy)
-    checkVault(newStrategy);
+    checkVault(newStrategy)
+    notExists(newStrategy)
+    exists(oldStrategy);
 ```
 **Parameters**
 
@@ -550,7 +624,7 @@ Internal function to rebalance strategy
 
 
 ```solidity
-function _rebalance(IBaseStrategy strategy) internal notPaused(strategy);
+function _rebalance(IBaseStrategy strategy) internal notPaused(strategy) exists(strategy);
 ```
 **Parameters**
 
@@ -574,7 +648,11 @@ Withdraws all assets from the strategy and removes it from the queue
 
 
 ```solidity
-function remove(IBaseStrategy strategy) external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 amountAssets);
+function remove(IBaseStrategy strategy)
+    external
+    onlyRole(DEFAULT_ADMIN_ROLE)
+    exists(strategy)
+    returns (uint256 amountAssets);
 ```
 **Parameters**
 
@@ -709,6 +787,28 @@ function setFeeRecipient(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE
 |Name|Type|Description|
 |----|----|-----------|
 |`recipient`|`address`|New recipient address|
+
+
+### setEmergencyBackupAddress
+
+Sets emergency backup address
+
+**Notes:**
+- modifier: onlyRole(DEFAULT_ADMIN_ROLE) Only administrator
+
+- requires: emergencyBackupAddress must not be zero address
+
+- emits: UpdateEmergencyBackupAddress
+
+
+```solidity
+function setEmergencyBackupAddress(address backupAddress) external onlyRole(DEFAULT_ADMIN_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`backupAddress`|`address`|New backup address|
 
 
 ### emergencyWithdraw
@@ -901,13 +1001,28 @@ function feeRecipient() external view returns (address);
 |`<none>`|`address`|Recipient address|
 
 
+### emergencyBackupAddress
+
+Gets emergency backup address
+
+
+```solidity
+function emergencyBackupAddress() external view returns (address);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`address`|emergency backup address|
+
+
 ### totalAssets
 
 Includes balance in vault itself and all active strategies
 
 
 ```solidity
-function totalAssets() public view override(ERC4626, IVault) returns (uint256);
+function totalAssets() public view override(ERC4626, IVault) returns (uint256 total);
 ```
 
 ### strategyBalance

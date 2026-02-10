@@ -1,5 +1,5 @@
 # IVault
-[Git Source](https://github.com/LikeSouvenir/Vault/blob/8ed516f562cdb60c3e34b4e86693fe2158400602/src/interfaces/IVault.sol)
+[Git Source](https://github.com/LikeSouvenir/Vault/blob/36fdd71da90fb692ff334a0a992d2c455d783bcd/src/interfaces/IVault.sol)
 
 **Inherits:**
 IERC4626, IERC165
@@ -179,6 +179,21 @@ function setFeeRecipient(address recipient) external;
 |`recipient`|`address`|New recipient address|
 
 
+### setEmergencyBackupAddress
+
+Sets emergency backup address
+
+
+```solidity
+function setEmergencyBackupAddress(address backupAddress) external;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`backupAddress`|`address`|New backup address|
+
+
 ### emergencyWithdraw
 
 Emergency withdraw from strategy (admin only)
@@ -328,6 +343,21 @@ function feeRecipient() external view returns (address);
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`address`|Recipient address|
+
+
+### emergencyBackupAddress
+
+Gets emergency backup address
+
+
+```solidity
+function emergencyBackupAddress() external view returns (address);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`address`|emergency backup address|
 
 
 ### strategyBalance
@@ -546,6 +576,20 @@ event UpdateManagementRecipient(address indexed recipient);
 |----|----|-----------|
 |`recipient`|`address`|New fee recipient address|
 
+### UpdateEmergencyBackupAddress
+Event emitted when fee emergencyBackupAddress is updated
+
+
+```solidity
+event UpdateEmergencyBackupAddress(address indexed backupAddress);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`backupAddress`|`address`|New emergency backup address|
+
 ### UpdateStrategyInfo
 Event emitted when strategy info is updated
 
@@ -577,4 +621,71 @@ event Reported(uint256 profit, uint256 loss, uint256 managementFees, uint256 per
 |`loss`|`uint256`|Loss amount|
 |`managementFees`|`uint256`|Management fees charged|
 |`performanceFees`|`uint256`|Performance fees charged|
+
+## Errors
+### ZeroAddress
+
+```solidity
+error ZeroAddress();
+```
+
+### UnsupportedIBaseStrategy
+
+```solidity
+error UnsupportedIBaseStrategy();
+```
+
+### IncorrectMin
+
+```solidity
+error IncorrectMin();
+```
+
+### IncorrectMax
+
+```solidity
+error IncorrectMax();
+```
+
+### InvalidAssetToken
+
+```solidity
+error InvalidAssetToken(IBaseStrategy strategy);
+```
+
+### InvalidVault
+
+```solidity
+error InvalidVault(IBaseStrategy strategy);
+```
+
+### IsPaused
+
+```solidity
+error IsPaused(IBaseStrategy strategy);
+```
+
+### NotPaused
+
+```solidity
+error NotPaused(IBaseStrategy strategy);
+```
+
+### OutOfLimitStrategies
+
+```solidity
+error OutOfLimitStrategies();
+```
+
+### StrategyExists
+
+```solidity
+error StrategyExists(IBaseStrategy strategy);
+```
+
+### StrategyNotExists
+
+```solidity
+error StrategyNotExists(IBaseStrategy strategy);
+```
 

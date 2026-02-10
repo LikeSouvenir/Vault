@@ -1,5 +1,5 @@
 # BaseStrategy
-[Git Source](https://github.com/LikeSouvenir/Vault/blob/8ed516f562cdb60c3e34b4e86693fe2158400602/src/BaseStrategy.sol)
+[Git Source](https://github.com/LikeSouvenir/Vault/blob/36fdd71da90fb692ff334a0a992d2c455d783bcd/src/BaseStrategy.sol)
 
 **Inherits:**
 [IBaseStrategy](/src/interfaces/IBaseStrategy.sol/interface.IBaseStrategy.md), ReentrancyGuard, AccessControl

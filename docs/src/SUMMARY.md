@@ -4,6 +4,8 @@
   - [❱ StrategyExamples](src/StrategyExamples/README.md)
     - [AaveUsdcStrategy](src/StrategyExamples/AaveUsdcStrategy.sol/contract.AaveUsdcStrategy.md)
     - [CompoundUsdcStrategy](src/StrategyExamples/CompoundUsdcStrategy.sol/contract.CompoundUsdcStrategy.md)
+  - [❱ extentions](src/extentions/README.md)
+    - [PriceGetter](src/extentions/PriceGetter.sol/library.PriceGetter.md)
   - [❱ interfaces](src/interfaces/README.md)
     - [IPool](src/interfaces/IAaveV3.sol/interface.IPool.md)
     - [IRewardsController](src/interfaces/IAaveV3.sol/interface.IRewardsController.md)

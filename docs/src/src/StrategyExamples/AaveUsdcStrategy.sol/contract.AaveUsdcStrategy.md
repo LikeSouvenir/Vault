@@ -1,5 +1,5 @@
 # AaveUsdcStrategy
-[Git Source](https://github.com/LikeSouvenir/Vault/blob/8ed516f562cdb60c3e34b4e86693fe2158400602/src/StrategyExamples/AaveUsdcStrategy.sol)
+[Git Source](https://github.com/LikeSouvenir/Vault/blob/36fdd71da90fb692ff334a0a992d2c455d783bcd/src/StrategyExamples/AaveUsdcStrategy.sol)
 
 **Inherits:**
 [BaseStrategy](/src/BaseStrategy.sol/abstract.BaseStrategy.md)
@@ -13,57 +13,107 @@ Earns interest on USDC deposits and collects AAVE rewards, swapping them to USDC
 
 
 ## State Variables
-### aavePool
+### MAX_BPS
+
+```solidity
+uint16 private constant MAX_BPS = 10_000
+```
+
+
+### MIN_BPS
+
+```solidity
+uint16 private constant MIN_BPS = 1
+```
+
+
+### ADDRESS_AGGREGATOR_V3
+ADDRESS_AGGREGATOR_V3 chainlink
+
+
+```solidity
+address public immutable ADDRESS_AGGREGATOR_V3
+```
+
+
+### AAVE_POOL
 Aave V3 Pool contract for lending operations
 
 
 ```solidity
-IPool public immutable aavePool
+IPool public immutable AAVE_POOL
 ```
 
 
-### aToken
+### A_TOKEN
 aUSDC token representing USDC deposits in Aave
 
 
 ```solidity
-IAToken public immutable aToken
+IAToken public immutable A_TOKEN
 ```
 
 
-### rewardsController
+### REWARDS_CONTROLLER
 Aave Rewards Controller for claiming incentive rewards
 
 
 ```solidity
-IRewardsController public immutable rewardsController
+IRewardsController public immutable REWARDS_CONTROLLER
 ```
 
 
-### rewardToken
+### REWARD_TOKEN
 Address of the reward token (AAVE)
 
 
 ```solidity
-address public immutable rewardToken
+address public immutable REWARD_TOKEN
 ```
 
 
-### uniswapV2Router
+### UNISWAP_V2_ROUTER
 Uniswap V2 Router for swapping rewards to USDC
 
 
 ```solidity
-address public immutable uniswapV2Router
+address public immutable UNISWAP_V2_ROUTER
+```
+
+
+### updateMaxTime
+Max difference between AddressAggregatorV3.latestRoundData.updatedAt and now
+
+
+```solidity
+uint96 public updateMaxTime = 1 hours
 ```
 
 
 ### swapDeadline
-Deadline duration for Uniswap swaps (default: 1 hour)
+Deadline duration for Uniswap swaps, by default is 1 hour
 
 
 ```solidity
-uint256 public swapDeadline = 1 hours
+uint96 public swapDeadline = 1 hours
+```
+
+
+### slippageBps
+Slippage tolerance in basis points, by default is 0,5%
+
+
+```solidity
+uint16 public slippageBps = 50
+```
+
+
+### minSwapAmount
+Minimum swap amount in USDC to trigger swap, by default is 2000e18
+
+
+```solidity
+uint256 public minSwapAmount = 2000e18
 ```
 
 
@@ -84,7 +134,8 @@ constructor(
     address aToken_,
     address rewardsController_,
     address rewardToken_,
-    address uniswapRouter_
+    address uniswapRouter_,
+    address addressAggregatorV3_
 ) BaseStrategy(token_, name_, vault_);
 ```
 **Parameters**
@@ -99,6 +150,7 @@ constructor(
 |`rewardsController_`|`address`|Address of Aave Rewards Controller|
 |`rewardToken_`|`address`|Address of the reward token (AAVE)|
 |`uniswapRouter_`|`address`|Address of Uniswap V2 Router|
+|`addressAggregatorV3_`|`address`|Address of Chainlink AddressAggregatorV3|
 
 
 ### _pull
@@ -201,12 +253,116 @@ role: DEFAULT_ADMIN_ROLE Only callable by admin
 
 
 ```solidity
-function setSwapDeadline(uint256 delay) external onlyRole(DEFAULT_ADMIN_ROLE);
+function setSwapDeadline(uint96 newSwapDeadline) external onlyRole(DEFAULT_ADMIN_ROLE);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`delay`|`uint256`|New deadline duration in seconds|
+|`newSwapDeadline`|`uint96`|New deadline duration in seconds|
 
+
+### setUpdateMaxTime
+
+Updates the maximum time for price updates from aggregator
+
+Prevents using stale prices by ensuring updates occur within reasonable timeframes
+
+**Note:**
+role: DEFAULT_ADMIN_ROLE Only callable by admin
+
+
+```solidity
+function setUpdateMaxTime(uint96 newMaxTime) external onlyRole(DEFAULT_ADMIN_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newMaxTime`|`uint96`|New maximum update time in seconds|
+
+
+### setSlippageBps
+
+Updates the slippage tolerance for swaps, by default = 2000e18
+
+Prevents front-running and excessive price impact during COMP→USDC swaps
+
+**Note:**
+role: DEFAULT_ADMIN_ROLE Only callable by admin
+
+
+```solidity
+function setSlippageBps(uint16 newSlippageBps) external onlyRole(DEFAULT_ADMIN_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newSlippageBps`|`uint16`|New slippage tolerance in basis points (1-10000)|
+
+
+### setMinSwapAmount
+
+Updates the minimum COMP amount to trigger a swap
+
+Prevents wasteful gas spending on small reward swaps
+
+**Note:**
+role: DEFAULT_ADMIN_ROLE Only callable by admin
+
+
+```solidity
+function setMinSwapAmount(uint256 newMinAmount) external onlyRole(DEFAULT_ADMIN_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newMinAmount`|`uint256`|New minimum amount in USDC terms (18 decimals)|
+
+
+## Events
+### SlippageUpdated
+
+```solidity
+event SlippageUpdated(uint256 newSlippageBps);
+```
+
+### MinSwapAmountUpdated
+
+```solidity
+event MinSwapAmountUpdated(uint256 newMinAmount);
+```
+
+### SwapExecuted
+
+```solidity
+event SwapExecuted(uint256 amountIn, uint256 amountOut, uint256 minAmountOut);
+```
+
+## Errors
+### IncorrectMin
+
+```solidity
+error IncorrectMin();
+```
+
+### IncorrectMax
+
+```solidity
+error IncorrectMax();
+```
+
+### LessThanMinimumSwapAmount
+
+```solidity
+error LessThanMinimumSwapAmount(uint256 currentAmount);
+```
+
+### IncorrectMinTime
+
+```solidity
+error IncorrectMinTime();
+```
 
